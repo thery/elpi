@@ -1,0 +1,4 @@
+parse error at 2:6 (state 417)
+  1:0-1:3     Clause p
+  2:0-2:7     ERROR «kind t.»  (3 pieces, 2 without text)
+  3:0-3:3     Clause p

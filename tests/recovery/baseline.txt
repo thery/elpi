@@ -1,0 +1,25 @@
+files: 196 used, 2 skipped (the original does not parse cleanly)
+edit          runs  crash timeout expected lost-near  lost-far    far>0  err-chars
+----------------------------------------------------------------------------------
+truncate      1927     35       0    10272        26         0        0       40.8
+del-token     1927      9       0    18010       156         9        9       27.8
+del-line      1382      7       0    16233        52         3        3        9.0
+del-chunk     1820     12       0    14879        39         0        0       14.0
+del-closer    1486      6       0    17150       658        28       28       83.8
+half-token    1927     42       0    17825       169         8        8       26.1
+TOTAL        10469    111       0    94369      1100        48       48       33.0
+
+crashes:
+     26  File "mastic/src/errorResilientParser.ml", line 271, characters 42-48: Assertion failed
+     24  Elpi_parser.Lexer.Error(_, "missing terminator for string starting here")
+     20  Invalid_argument("String.sub / Bytes.sub")
+     17  Failure("lexing: empty token")
+      9  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: x\\..")
+      5  Elpi_parser.Parser_config.ParseError(_, "bind '\\' operator must follow a name")
+      2  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: ..")
+      2  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: (.. : ..)")
+      2  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: x\\x\\x\\..")
+      1  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: x\\x\\..")
+      1  Elpi_parser.Parser_config.ParseError(_, "Macro name must begin with '@'")
+      1  Elpi_parser.Parser_config.ParseError(_, "Mixfix directives are not supported by this parser.\n\nThe parser is based on token families.\nA family is id
+      1  Failure("File short.elpi not found in: /home/thery/claudeExp/mastic-work/elpi/tests/sources")

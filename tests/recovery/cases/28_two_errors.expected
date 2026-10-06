@@ -1,0 +1,7 @@
+parse error at 2:16 (state 185)
+parse error at 4:11 (state 311)
+  1:0-1:3     Clause p
+  1:4-2:17    ERROR «⏎p X :- X is 2 + .»  (8 pieces, 7 without text)
+  3:0-3:3     Clause p
+  3:4-4:12    ERROR «⏎p Y :- q (Y.»  (7 pieces, 6 without text)
+  5:0-5:3     Clause p

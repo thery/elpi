@@ -1,0 +1,4 @@
+parse error at 2:12 (state 205)
+  1:0-1:3     Clause p
+  1:4-2:13    ERROR «⏎p X :- q X, .»  (6 pieces, 5 without text)
+  3:0-3:3     Clause p

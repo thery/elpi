@@ -1,0 +1,4 @@
+parse error at 2:14 (state 213)
+  1:0-1:3     Clause p
+  1:4-2:15    ERROR «⏎p F :- F = x\ .»  (8 pieces, 7 without text)
+  3:0-3:3     Clause p

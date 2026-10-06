@@ -22,6 +22,8 @@ module type Parser_w_Internals = sig
     val infix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
     val prefix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
     val postfix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
+    val program_resilient : Lexing.lexbuf ->
+      Mastic.ErrorResilientParser.error list * Mastic.ErrorResilientParser.completion list * Ast.Program.t
   end
 end
 
@@ -132,7 +134,7 @@ end
 
 module ErProgram = Mastic.ErrorResilientParser.Make(Grammar.MenhirInterpreter)(ProgramParser)(Recovery)
 module ErGoal = Mastic.ErrorResilientParser.Make(Grammar.MenhirInterpreter)(GoalParser)(Recovery)
-(* let () = Mastic.ErrorResilientParser.debug := true *)
+let () = Mastic.ErrorResilientParser.debug := Sys.getenv_opt "MASTIC_DEBUG" <> None
 let e2e = function
   | Mastic.ErrorResilientParser.LexError(loc,msg) ->
       let loc = {
@@ -269,6 +271,7 @@ module Internal = struct
 let infix_SYMB = Grammar.infix_SYMB
 let prefix_SYMB = Grammar.prefix_SYMB
 let postfix_SYMB = Grammar.postfix_SYMB
+let program_resilient lexbuf = ErProgram.parse lexbuf
 end
 
 end
