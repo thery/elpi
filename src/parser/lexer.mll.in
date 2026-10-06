@@ -16,6 +16,10 @@
     (* Error recovery: an unterminated string, quotation or comment becomes
        an error token for its opening delimiter, and lexing restarts just
        after it (when the buffer still holds that text) *)
+    (* recovery: a string cannot span lines, so that a string whose closing
+       quote is missing does not run to the next string *)
+    let single_line_strings = ref false
+
     (* the errors turned into error tokens, for the parser to report them *)
     let errors : (Lexing.position * string) list ref = ref []
 
@@ -128,7 +132,8 @@ and multilinecomment v start nest = parse
 | eof { rewind_error lexbuf start "/*" "missing terminator for comment starting here" }
 
 and string start b = parse
-| '\n'     { Buffer.add_char b '\n'; new_line lexbuf; string start b lexbuf }
+| '\n'     { if !single_line_strings then rewind_error lexbuf start "\"" "missing terminator for string starting here"
+             else (Buffer.add_char b '\n'; new_line lexbuf; string start b lexbuf) }
 | '\\' 'n' { Buffer.add_char b '\n'; string start b lexbuf }
 | '\\' 'b' { Buffer.add_char b '\b'; string start b lexbuf }
 | '\\' 't' { Buffer.add_char b '\t'; string start b lexbuf }

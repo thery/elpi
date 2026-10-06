@@ -385,7 +385,19 @@ module Internal = struct
 let infix_SYMB = Grammar.infix_SYMB
 let prefix_SYMB = Grammar.prefix_SYMB
 let postfix_SYMB = Grammar.postfix_SYMB
-let program_resilient lexbuf = let errs, comps, ast, _ = parse_program lexbuf in errs, comps, ast
+(* When there are errors, the file is parsed a second time with strings that
+   cannot span lines: a string whose closing quote is missing otherwise runs
+   to the next string, maybe far away. The result with more declarations that
+   are not errors is kept. *)
+let program_resilient lexbuf =
+  let copy = { lexbuf with Lexing.lex_buffer = Bytes.copy lexbuf.Lexing.lex_buffer } in
+  let errs, comps, ast, _ = parse_program lexbuf in
+  if errs = [] && comps = [] then errs, comps, ast else
+  let good ast = List.length (List.filter (function Ast.Decl.Error _ -> false | _ -> true) ast) in
+  Lexer.single_line_strings := true;
+  let errs2, comps2, ast2, _ =
+    Fun.protect ~finally:(fun () -> Lexer.single_line_strings := false) (fun () -> parse_program copy) in
+  if good ast2 > good ast then errs2, comps2, ast2 else errs, comps, ast
 end
 
 end

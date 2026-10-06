@@ -30,8 +30,8 @@ recovered unchanged:
 |-----------------------------------------------|---------------:|------------:|
 | **part of the file parsed** (outside errors)  | 83.8 %         | **95.8 %**  |
 | parser crashes                                | 92             | **0**       |
-| untouched declarations lost next to the edit  | 1 097          | **643**     |
-| untouched declarations lost further away      | 45             | **30**      |
+| untouched declarations lost next to the edit  | 1 097          | **635**     |
+| untouched declarations lost further away      | 45             | **19**      |
 | characters inside errors, per edit            | 33.0           | **6.8**     |
 
 The part of the file that is parsed, per kind of edit:
@@ -46,7 +46,33 @@ The part of the file that is parsed, per kind of edit:
 | `half-token` (a token being typed) | 86.2 % | **95.3 %** |
 
 Full numbers: [`baseline.txt`](baseline.txt) (before),
-[`improved.txt`](improved.txt) (after). The improvements, one by one:
+[`improved.txt`](improved.txt) (after).
+
+### On real Coq-Elpi programs
+
+The 6 files of [one_num_type](https://github.com/ybertot/one_num_type)
+(`srcElpi/*.elpi`, 993 lines, full of Coq quotations `{{ … }}` and long
+clauses with `std.do! [ … ]`), with 50 edits of each kind per file
+([`one_num_type.txt`](one_num_type.txt)):
+
+|                                               | `error-parser` | this branch |
+|-----------------------------------------------|---------------:|------------:|
+| **part of the file parsed**                   | 78.9 %         | **98.2 %**  |
+| parser crashes                                | 300 (17 %)     | **0**       |
+| untouched declarations lost next to the edit  | 131            | **105**     |
+| untouched declarations lost further away      | 0              | **0**       |
+
+`error-parser` crashes so often there because almost any edit near a
+quotation leaves it unterminated, which was an exception of the lexer.
+To reproduce:
+
+```sh
+git clone https://github.com/ybertot/one_num_type.git
+git -C one_num_type checkout d34d77dc
+python3 elpi/tests/recovery/recov.py fuzz --per-kind 50 one_num_type/srcElpi/*.elpi
+```
+
+The improvements, one by one:
 
 ### 1. An error no longer throws away its clause
 
@@ -158,6 +184,19 @@ before                                   after
                                            2:0-2:6   Clause p
                                            3:0-3:3   Clause p
 ```
+
+### 5. A string whose closing quote is missing no longer swallows the file
+
+A string may span lines, so when its closing `"` is deleted it runs to the
+next `"`, maybe far away, and everything in between is lost. When a file
+has errors, `Parse.Internal.program_resilient` parses it a second time with
+strings that cannot span lines (`Lexer.single_line_strings`), and keeps the
+result with more declarations that are not errors. The normal path of Elpi
+parses once, as before.
+
+In `one_num_type/srcElpi/tools.elpi`, cutting the end of
+`coq.error "There are two declarations for the same integer"` lost 45
+declarations; now there is one error, at the opening `"`.
 
 ## How the recovery works
 
