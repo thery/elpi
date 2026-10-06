@@ -51,11 +51,6 @@ module Grammar = Grammar.Make(ParseFile)
   
 let message_of_state s = try Error_messages.message s with Not_found -> "syntax error"
 
-(* Panic mode: after an error, the tokens up to the next full stop, or up to
-   the next token at the beginning of a line, are turned into errors, so that
-   the rest of a broken clause is not parsed as a new clause *)
-let skipping = ref false
-
 let at_line_start (p : Lexing.position) = p.pos_cnum = p.pos_bol
 
 (* a token at the beginning of a line, or a keyword that begins a declaration,
@@ -68,10 +63,6 @@ let restart_point t (p : Lexing.position) =
   | Tokens.CONSTRAINT | Tokens.RULE -> true
   | _ -> false
 
-let error_token lexbuf =
-  Tokens.ERROR_TOKEN Mastic.Error.(mkLexError
-    (loc (Lexing.lexeme lexbuf) lexbuf.Lexing.lex_start_p lexbuf.Lexing.lex_curr_p))
-
 module ProgramParser = struct
   type ast = Ast.Program.t
   type 'a checkpoint = 'a Grammar.MenhirInterpreter.checkpoint
@@ -80,14 +71,7 @@ module ProgramParser = struct
 
   type token = Grammar.token
 
-  let token lexbuf =
-    let t = Lexer.token C.versions lexbuf in
-    if not !skipping then t
-    else match t with
-      | Tokens.EOF -> skipping := false; t
-      | Tokens.FULLSTOP -> skipping := false; error_token lexbuf
-      | _ when restart_point t lexbuf.Lexing.lex_start_p -> skipping := false; t
-      | _ -> error_token lexbuf
+  let token = Lexer.token C.versions
 end
 module GoalParser = struct
   type ast = Ast.Goal.t
@@ -133,19 +117,34 @@ module Recovery = struct
     | T_RCURLY -> Some ("}", Tokens.RCURLY)
     | T_FULLSTOP -> Some (".", Tokens.FULLSTOP)
     | _ -> None
-  let match_error_token = function Tokens.ERROR_TOKEN x -> Some x | _ -> None
-  let build_error_token t = Tokens.ERROR_TOKEN t
+  (* DECL_ERROR_TOKEN is an error that only a declaration accepts: Mastic
+     merges the stack into it up to the declaration, which becomes an error.
+     It is marked by a piece Lex "\000", that survives the merges *)
+  let decl_marker = "\000"
+  let has_decl_marker e =
+    List.exists (fun x -> Mastic.Error.unloc x = Mastic.Error.Lex decl_marker) e
+  let match_error_token = function Tokens.ERROR_TOKEN x | Tokens.DECL_ERROR_TOKEN x -> Some x | _ -> None
+  let build_error_token t = if has_decl_marker t then Tokens.DECL_ERROR_TOKEN t else Tokens.ERROR_TOKEN t
   let is_eof_token = function Tokens.EOF -> true | _ -> false
   let reduce_as_parse_error : type a. a -> a Grammar.MenhirInterpreter.symbol -> Lexing.position -> Lexing.position -> token =
     let open Grammar.MenhirInterpreter in
    fun x tx b e ->
     match tx with
     | N N_decl -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Decl.build_token (loc x b e))
+    | N N_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_term_noconj -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_closed_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_head_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_open_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_open_term_noconj -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_binder_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_binder_term_noconj -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_clause_hd_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_clause_hd_closed_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
+    | N N_clause_hd_open_term -> Tokens.ERROR_TOKEN Mastic.Error.(Ast.Term.build_token (loc x b e))
     | N _ -> Tokens.ERROR_TOKEN Mastic.Error.(mkLexError (loc "TODO" b e))
     | T y -> Tokens.ERROR_TOKEN Mastic.Error.(mkLexError (loc (Format.asprintf "%a" (pp_symbol (Some x)) tx) b e))
 
-
-  let complete () = Mastic.ErrorResilientParser.TurnIntoError
 
   let is_term =
     let open Grammar.MenhirInterpreter in
@@ -156,6 +155,8 @@ module Recovery = struct
     let open Grammar.MenhirInterpreter in
     function
     | X (N N_decl), _,_,0 -> true
+    (* after a declaration, the kernel item is program -> decl . program *)
+    | X (N N_program), _,_,1 -> true
     | _ -> false
 
   let handle_unexpected_token ~productions
@@ -168,21 +169,38 @@ module Recovery = struct
      | p :: _ when List.exists is_term productions -> Reduce p
      | 
      _ ->
-        match next_token.t with
-        | Tokens.FULLSTOP | Tokens.EOF when acceptable_tokens <> [] && generation_streak < 10 ->
-            (* complete the declaration: close the open brackets (and add the
-               final dot at the end of the file) *)
-            GenerateToken (List.hd acceptable_tokens)
-        | Tokens.EOF when generation_streak < 10 ->
-            (* the current declaration becomes an error, then EOF fits *)
-            GenerateHole
+        (* finish the current declaration: reduce if possible, otherwise
+           insert the final dot or a closing bracket if it fits, otherwise
+           try the dot anyway, then a hole for a missing term, then close the
+           declaration as an error *)
+        let complete () =
+          if generation_streak >= 10 then TurnIntoError else
+          match reducible_productions with
+          | p :: _ -> Reduce p
+          | _ ->
+          match List.find_opt (fun x -> x.t = Tokens.FULLSTOP) acceptable_tokens, acceptable_tokens with
+          | Some x, _ | None, x :: _ -> GenerateToken x
+          | None, [] ->
+              (* the dot may still fit after empty reductions, that Mastic does
+                 not see but Menhir performs: try it, unless the dot that does
+                 not fit is one we generated (it has an empty span) *)
+              if next_token.t <> Tokens.FULLSTOP then
+                GenerateToken { s = "."; t = Tokens.FULLSTOP; b = next_token.b; e = next_token.b }
+              (* a term may be missing before the dot *)
+              else if generation_streak <= 1 then GenerateHole
+              (* nothing finishes the declaration: it becomes an error *)
+              else
+                let b = next_token.b in
+                GenerateToken { s = "(error)"; b; e = b;
+                  t = Tokens.DECL_ERROR_TOKEN Mastic.Error.(mkLexError (loc decl_marker b b)) } in
+        if List.exists is_decl_start productions then TurnIntoError
+        else match next_token.t with
         | Tokens.FULLSTOP | Tokens.EOF -> complete ()
-        | t when restart_point t next_token.b && generation_streak < 3
-                 && not (List.exists is_decl_start productions) ->
-            (* likely the beginning of the next declaration: the current one
-               becomes an error, and parsing restarts at this token *)
-            GenerateHole
-        | _ -> skipping := true; TurnIntoError
+        | t when restart_point t next_token.b ->
+            (* likely the beginning of the next declaration: finish the current
+               one, and parsing restarts at this token *)
+            complete ()
+        | _ -> TurnIntoError
 end
 
 module ErProgram = Mastic.ErrorResilientParser.Make(Grammar.MenhirInterpreter)(ProgramParser)(Recovery)
@@ -197,18 +215,36 @@ let rec merge_errors = function
 (* the errors of the lexer, recorded by Lexer.errors, are added to the ones of
    the parser; errs is in reverse order, as returned by Mastic *)
 let with_lex_errors f lexbuf =
-  Lexer.errors := [];
-  let errs, comps, ast = f lexbuf in
+  (* an accumulate parses another file in the middle of this one *)
+  let saved = !Lexer.errors, !Ast.Term.deferred, !Ast.Term.deferring in
+  let restore () =
+    let l, d, b = saved in Lexer.errors := l; Ast.Term.deferred := d; Ast.Term.deferring := b in
+  Lexer.errors := []; Ast.Term.deferred := []; Ast.Term.deferring := true;
+  let errs, comps, ast = try f lexbuf with e -> restore (); raise e in
   let lex = List.map (fun (p,m) -> Mastic.ErrorResilientParser.LexError(p,m)) !Lexer.errors in
-  Lexer.errors := [];
+  let deferred = List.rev !Ast.Term.deferred in
+  restore ();
+  (* the errors of the semantic actions are reported as lexical ones *)
+  let lexing_pos { Util.Loc.source_name; line; line_starts_at; source_start; _ } =
+    { Lexing.pos_fname = source_name; pos_lnum = line; pos_bol = line_starts_at; pos_cnum = source_start } in
+  let sem = List.filter_map (function
+    | Ast.Term.NotInProlog(loc,m) | Parser_config.ParseError(loc,m) ->
+        Some (Mastic.ErrorResilientParser.LexError(lexing_pos loc, m))
+    | Failure m -> Some (Mastic.ErrorResilientParser.LexError(lexbuf.Lexing.lex_start_p, m))
+    | _ -> None) deferred in
   let pos = function Mastic.ErrorResilientParser.LexError(p,_) | ParseError(p,_) -> p.Lexing.pos_cnum in
-  let errs = List.stable_sort (fun x y -> compare (pos y) (pos x)) (lex @ errs) in
-  errs, comps, ast
+  let errs = List.stable_sort (fun x y -> compare (pos y) (pos x)) (sem @ lex @ errs) in
+  (* the recovery may meet the same error several times: one per position *)
+  let rec dedup = function
+    | x :: (y :: _ as rest) when pos x = pos y -> dedup (x :: List.tl rest)
+    | x :: rest -> x :: dedup rest
+    | [] -> [] in
+  let errs = List.rev (dedup (List.rev errs)) in
+  errs, comps, ast, deferred
 
 let parse_program lexbuf =
-  skipping := false;
-  let errs, comps, ast = with_lex_errors ErProgram.parse lexbuf in
-  errs, comps, merge_errors ast
+  let errs, comps, ast, deferred = with_lex_errors ErProgram.parse lexbuf in
+  errs, comps, merge_errors ast, deferred
 let () = Mastic.ErrorResilientParser.debug := Sys.getenv_opt "MASTIC_DEBUG" <> None
 let e2e = function
   | Mastic.ErrorResilientParser.LexError(loc,msg) ->
@@ -244,7 +280,9 @@ let c2c (loc,msg) =
       } in
       (loc,"Completed with token " ^ msg)
 
-let raise_err (errs, compl, ast) =
+let raise_err (errs, compl, ast, deferred) =
+  (* an error of a semantic action is raised as is, as without recovery *)
+  match deferred with e :: _ -> raise e | [] ->
   match List.map e2e (List.rev errs) @ List.map c2c compl with
   | [] -> ast
   | (loc,msg) :: l ->
@@ -347,7 +385,7 @@ module Internal = struct
 let infix_SYMB = Grammar.infix_SYMB
 let prefix_SYMB = Grammar.prefix_SYMB
 let postfix_SYMB = Grammar.postfix_SYMB
-let program_resilient lexbuf = parse_program lexbuf
+let program_resilient lexbuf = let errs, comps, ast, _ = parse_program lexbuf in errs, comps, ast
 end
 
 end

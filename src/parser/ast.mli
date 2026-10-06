@@ -88,11 +88,22 @@ module Term : sig
    | Quoted of quote
    | Cast of t * typ
    | Parens of t
+   | Err of (Mastic.Error.t [@compare fun _ _ -> 0])
   and t = { it : t_; loc : Loc.t }
   and quote = { qloc : Loc.t; data : string; kind : string option }
   [@@ deriving show, ord]
 
   exception NotInProlog of Loc.t * string
+
+  (* error nodes, for the error-resilient parser *)
+  val of_token : Mastic.Error.t -> t
+  val build_token : t Mastic.Error.located -> Mastic.Error.t
+
+  (* when !deferring, the exception is recorded in deferred, and an error term
+     is returned; otherwise it is raised *)
+  val deferring : bool ref
+  val deferred : exn list ref
+  val defer : Loc.t -> exn -> t
 
   (* Can raise NotInProlog *)
   val mkApp : Loc.t -> t list -> t

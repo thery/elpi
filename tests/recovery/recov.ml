@@ -11,11 +11,18 @@ let one_line s = String.map (function '\n' | '\t' -> ' ' | c -> c) s
 
 let () =
   let file = Sys.argv.(1) in
-  let paths = if Array.length Sys.argv > 2 then [ Sys.argv.(2) ] else [ Filename.dirname file ] in
+  let paths = if Array.length Sys.argv > 2 && Sys.argv.(2) <> "--strict" then [ Sys.argv.(2) ] else [ Filename.dirname file ] in
   let module P = Parse.Make (struct
     let versions = Elpi_util.Util.StrMap.empty
     let resolver = Elpi_util.Util.std_resolver ~paths ()
   end) in
+  if Array.length Sys.argv > 2 && Sys.argv.(2) = "--strict" then begin
+    (* the normal path of Elpi: the first error is raised *)
+    (match P.program ~file with
+     | ast -> Printf.printf "OK %d declarations\n" (List.length ast)
+     | exception e -> Printf.printf "RAISED %s\n" (one_line (Printexc.to_string e)));
+    exit 0
+  end;
   let ic = open_in_bin file in
   let lexbuf = Lexing.from_string (really_input_string ic (in_channel_length ic)) in
   lexbuf.Lexing.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = file };

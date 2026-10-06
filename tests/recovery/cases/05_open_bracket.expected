@@ -1,4 +1,7 @@
-parse error at 2:13 (state 128)
+parse error at 2:13 (state 129)
+inserted '_' at 2:13
+inserted '_' at 2:13
+inserted '(error)' at 2:13
   1:0-1:3     Clause p
-  1:4-2:14    ERROR «⏎p [X|Y :- q X.»  (10 pieces, 9 without text)
+  1:4-2:14    ERROR «⏎p [X|Y :- q X.»  (7 pieces, 5 without text)
   3:0-3:3     Clause p

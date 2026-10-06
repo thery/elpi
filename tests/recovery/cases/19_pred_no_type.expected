@@ -1,4 +1,5 @@
 parse error at 2:16 (state 68)
+inserted '_' at 2:16
   1:0-1:3     Clause p
-  1:4-2:17    ERROR «⏎pred q i:int, o:.»  (7 pieces, 6 without text)
+  1:4-2:17    ERROR «⏎pred q i:int, o:.»  (8 pieces, 6 without text)
   3:0-3:3     Clause p

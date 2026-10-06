@@ -111,11 +111,29 @@ module Term = struct
    | Quoted of quote
    | Cast of t * typ
    | Parens of t
+   | Err of (Mastic.Error.t [@compare fun _ _ -> 0])
   and t = { it : t_; loc : Loc.t }
   and quote = { qloc : Loc.t; data : string; kind : string option }
   [@@ deriving show, ord]
 
 exception NotInProlog of Loc.t * string
+
+(* error nodes, for the error-resilient parser *)
+type Mastic.Error.t_ += Term of t
+
+let loc_of_error x =
+  let b, e = Mastic.Error.span x in
+  { Loc.client_payload = None; source_name = b.Lexing.pos_fname;
+    source_start = b.Lexing.pos_cnum; source_stop = e.Lexing.pos_cnum;
+    line = b.Lexing.pos_lnum; line_starts_at = b.Lexing.pos_bol }
+
+let Mastic.Error.Registered { of_token; build_token; _ } =
+  Mastic.Error.register "Term.t" {
+    Mastic.Error.pp = pp;
+    match_ast = (function { it = Err x } -> Some x | _ -> None);
+    match_error = (function Term x -> Some x | _ -> None);
+    build_ast = (fun x -> { it = Err x; loc = loc_of_error x });
+    build_error = (fun x -> Term x) }
 
 let mkC loc x = { loc; it = CData x }
 let mkLam loc x xloc ty t = { loc; it = Lam (Func.from_string x,xloc,ty,t) }
@@ -166,6 +184,19 @@ let mkSeq ?loc (l : t list) =
    match loc with None -> l | Some loc -> { l with loc }
 let mkCast loc t ty = { loc; it = Cast(t,ty) }
 
+(* While the error-resilient parser runs, the errors found by the semantic
+   actions are deferred: the action returns an error term instead of raising,
+   and the parser raises the first deferred exception when it has to fail *)
+let deferring = ref false
+let deferred : exn list ref = ref []
+let defer loc e =
+  if not !deferring then raise e;
+  deferred := e :: !deferred;
+  let pos n = { Lexing.pos_fname = loc.Loc.source_name; pos_lnum = loc.Loc.line;
+                pos_bol = loc.Loc.line_starts_at; pos_cnum = n } in
+  { loc; it = Err (Mastic.Error.mkLexError
+      (Mastic.Error.loc "error" (pos loc.Loc.source_start) (pos loc.Loc.source_stop))) }
+
 let rec best_effort_pp = function
  | Lam (x,_,_,t) -> "x\\" ^ best_effort_pp t.it
  | CData c -> CData.show c
@@ -179,7 +210,7 @@ let mkApp loc = function
   | { it = App(c,l1) } ::l2 -> { loc; it = App(c,l1@l2) }
   | { it = (Const _ | Quoted _) } as c::l2 -> { loc; it = App(c,l2) }
   | [] -> anomaly ~loc "empty application"
-  | x::_ -> raise (NotInProlog(loc,"syntax error: the head of an application must be a constant or a variable, got: " ^ best_effort_pp x.it))
+  | x::_ -> defer loc (NotInProlog(loc,"syntax error: the head of an application must be a constant or a variable, got: " ^ best_effort_pp x.it))
 
 let mkAppF loc (cloc, c) l =
   if l = [] then anomaly ~loc "empty application";

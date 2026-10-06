@@ -29,6 +29,48 @@ KIND = re.compile(r"^\(Ast\.Decl\.(\w+)")
 NAME = re.compile(r"Ast\.Term\.Const ([^ ;)]+)|name = ([^ ;]+);")
 
 
+def term_error_spans(raw, path):
+    """spans of the (Ast.Term.Err ...) nodes: the loc that follows the node"""
+    spans, i = [], 0
+    while True:
+        i = raw.find("(Ast.Term.Err", i)
+        if i < 0:
+            return spans
+        depth, j, instr = 0, i, False
+        while j < len(raw):
+            c = raw[j]
+            if instr:
+                if c == "\\":
+                    j += 1
+                elif c == '"':
+                    instr = False
+            elif c == '"':
+                instr = True
+            elif c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        m = LOC.search(raw, j)
+        if m and m.group(1) == path:
+            spans.append((int(m.group(2)), int(m.group(3))))
+        i = j
+
+
+def union_length(spans):
+    total, end = 0, None
+    for b, e in sorted(spans):
+        if end is None or b > end:
+            total += e - b
+            end = e
+        elif e > end:
+            total += e - end
+            end = e
+    return total
+
+
 class Decl:
     def __init__(self, raw, path):
         self.raw = raw
@@ -43,6 +85,7 @@ class Decl:
             spans = [(int(b), int(e)) for f, b, e in LOC.findall(raw) if f == path]
         self.b = min((b for b, _ in spans), default=None)
         self.e = max((e for _, e in spans), default=None)
+        self.term_errors = term_error_spans(raw, path) if self.kind != "Error" else []
         n = NAME.search(raw)
         self.name = (n.group(1) or n.group(2)) if n else ""
         # positions removed: two declarations are equal if they differ only by where they are
@@ -227,8 +270,12 @@ def fuzz_file(args):
                        lost_near=sum(1 for i in lost if i in near),
                        lost_far=sum(1 for i in lost if i not in near),
                        errors=len(r.errors), error_decls=len(r.error_decls),
-                       error_chars=sum(d.e - d.b for d in r.error_decls if d.b is not None),
-                       damage=b - a)
+                       # text inside errors: declaration errors and errors inside terms
+                       error_chars=union_length([(d.b, d.e) for d in r.error_decls if d.b is not None]
+                                                + [sp for d in r.decls for sp in d.term_errors]),
+                       damage=b - a, size=len(new))
+            # the part of the file outside errors; nothing when the parser fails
+            row["parsed"] = 1 - row["error_chars"] / max(1, len(new)) if r.status == "ok" else 0.0
             if keep_dir and (r.status != "ok" or row["lost_far"]):
                 name = "%s.%s.%d.elpi" % (os.path.basename(path)[:-5], kind, n)
                 open(os.path.join(keep_dir, name), "w").write(new)
@@ -249,19 +296,20 @@ def fuzz(files, seed, per_kind, jobs, keep_dir, out_json):
     if out_json:
         json.dump(rows, open(out_json, "w"), indent=0)
     print("files: %d used, %d skipped (the original does not parse cleanly)" % (len(files) - len(skipped), len(skipped)))
-    hdr = "%-11s %6s %6s %7s %8s %9s %9s %8s %10s" % (
-        "edit", "runs", "crash", "timeout", "expected", "lost-near", "lost-far", "far>0", "err-chars")
+    hdr = "%-11s %6s %6s %7s %8s %9s %9s %8s %10s %8s" % (
+        "edit", "runs", "crash", "timeout", "expected", "lost-near", "lost-far", "far>0", "err-chars", "parsed%")
     print(hdr)
     print("-" * len(hdr))
     kinds = sorted(set(r["kind"] for r in rows), key=lambda k: [r["kind"] for r in rows].index(k))
     for k in kinds + ["TOTAL"]:
         rs = [r for r in rows if k == "TOTAL" or r["kind"] == k]
         ok = [r for r in rs if r["status"] == "ok"]
-        print("%-11s %6d %6d %7d %8d %9d %9d %8d %10.1f" % (
+        print("%-11s %6d %6d %7d %8d %9d %9d %8d %10.1f %8.2f" % (
             k, len(rs), sum(r["status"] == "crash" for r in rs), sum(r["status"] == "timeout" for r in rs),
             sum(r["expected"] for r in ok), sum(r["lost_near"] for r in ok), sum(r["lost_far"] for r in ok),
             sum(r["lost_far"] > 0 for r in ok),
-            sum(r["error_chars"] for r in ok) / max(1, len(ok))))
+            sum(r["error_chars"] for r in ok) / max(1, len(ok)),
+            100 * sum(r["parsed"] for r in rs) / max(1, len(rs))))
     exns = collections.Counter(r["exn"] for r in rows if r["status"] == "crash")
     if exns:
         print("\ncrashes:")

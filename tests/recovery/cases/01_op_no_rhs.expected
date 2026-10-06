@@ -1,4 +1,5 @@
-parse error at 2:16 (state 185)
+parse error at 2:16 (state 186)
+inserted '_' at 2:16
   1:0-1:3     Clause p
-  1:4-2:17    ERROR «⏎p X :- X is 2 + .»  (8 pieces, 7 without text)
+  2:0-2:16    Clause :-
   3:0-3:3     Clause p

@@ -1,13 +1,13 @@
 files: 196 used, 2 skipped (the original does not parse cleanly)
-edit          runs  crash timeout expected lost-near  lost-far    far>0  err-chars
-----------------------------------------------------------------------------------
-truncate      1927     35       0    10272        26         0        0       40.8
-del-token     1927      6       0    18118       155         8        8       27.7
-del-line      1382      1       0    16567        51         2        2        9.4
-del-chunk     1820      4       0    15234        39         0        0       14.3
-del-closer    1486      6       0    17150       658        28       28       83.8
-half-token    1927     40       0    17897       168         7        7       26.1
-TOTAL        10469     92       0    95238      1097        45       45       33.0
+edit          runs  crash timeout expected lost-near  lost-far    far>0  err-chars  parsed%
+-------------------------------------------------------------------------------------------
+truncate      1927     35       0    10272        26         0        0       40.8    65.98
+del-token     1927      6       0    18118       155         8        8       27.7    86.28
+del-line      1382      1       0    16567        51         2        2        9.4    96.88
+del-chunk     1820      4       0    15234        39         0        0       14.3    93.00
+del-closer    1486      6       0    17150       658        28       28       83.8    76.91
+half-token    1927     40       0    17897       168         7        7       26.1    86.16
+TOTAL        10469     92       0    95238      1097        45       45       33.0    83.76
 
 crashes:
      26  File "mastic/src/errorResilientParser.ml", line 271, characters 42-48: Assertion failed

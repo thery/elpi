@@ -887,6 +887,7 @@ end = struct
     let open Ast.Term in
     match t with
     | Parens { loc; it } -> scope_term ~state ctx ~loc it
+    | Err _ -> error ~loc "syntax error"
     | Const c when is_discard c -> ScopedTerm.Discard { heapify = false }
     | Const c when is_macro_name c ->
         scope_term_macro ~loc ~state c []

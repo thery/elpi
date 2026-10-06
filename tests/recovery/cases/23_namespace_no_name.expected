@@ -1,4 +1,4 @@
-parse error at 2:10 (state 399)
+parse error at 2:10 (state 400)
   1:0-1:3     Clause p
   2:0-2:11    ERROR «namespace {»  (2 pieces, 1 without text)
   3:0-3:3     Clause p

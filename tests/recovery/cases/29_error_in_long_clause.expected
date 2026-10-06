@@ -1,4 +1,4 @@
-parse error at 5:8 (state 559)
+parse error at 5:8 (state 561)
   1:0-1:3     Clause p
-  1:4-7:6     ERROR «⏎p X :-⏎  q X,⏎  r X,⏎  s X X ),⏎  t X,⏎  u X.»  (12 pieces, 4 without text)
+  2:0-7:5     Clause :-
   8:0-8:3     Clause p
