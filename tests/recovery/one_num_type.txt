@@ -1,4 +1,4 @@
-# ybertot/one_num_type at d34d77dc, srcElpi/*.elpi, --per-kind 50
+# tests/recovery/corpus/one_num_type/*.elpi (ybertot/one_num_type at d34d77dc), --per-kind 50
 # error-parser
 files: 6 used, 0 skipped (the original does not parse cleanly)
 edit          runs  crash timeout expected lost-near  lost-far    far>0  err-chars  parsed%

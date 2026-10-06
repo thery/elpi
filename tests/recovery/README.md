@@ -64,12 +64,11 @@ clauses with `std.do! [ … ]`), with 50 edits of each kind per file
 
 `error-parser` crashes so often there because almost any edit near a
 quotation leaves it unterminated, which was an exception of the lexer.
-To reproduce:
+The files are in [`corpus/one_num_type`](corpus/one_num_type) (MIT license,
+Yves Bertot). To reproduce:
 
 ```sh
-git clone https://github.com/ybertot/one_num_type.git
-git -C one_num_type checkout d34d77dc
-python3 elpi/tests/recovery/recov.py fuzz --per-kind 50 one_num_type/srcElpi/*.elpi
+python3 elpi/tests/recovery/recov.py fuzz --per-kind 50 elpi/tests/recovery/corpus/one_num_type/*.elpi
 ```
 
 The improvements, one by one:
@@ -249,6 +248,7 @@ python3 elpi/tests/recovery/recov.py check elpi/tests/recovery/cases
 
 # the editing simulation, keeping the failing edited programs
 python3 elpi/tests/recovery/recov.py fuzz --keep /tmp/mutants elpi/tests/sources/*.elpi
+python3 elpi/tests/recovery/recov.py fuzz --per-kind 50 elpi/tests/recovery/corpus/one_num_type/*.elpi
 
 # what is recovered from one file
 python3 elpi/tests/recovery/recov.py show myfile.elpi
