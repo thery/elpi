@@ -10,7 +10,8 @@ This branch adds
 
 - **tests** measuring how good that recovery is: 31 hand-written broken
   programs, and a simulation of editing on the 196 valid programs of
-  `tests/sources`;
+  `tests/sources` and on the Coq-Elpi programs of
+  [`corpus/one_num_type`](corpus/one_num_type);
 - a **better recovery**, evaluated with these tests: a new strategy
   (`src/parser/parse.ml`), error nodes inside terms (`Term.Err`), a lexer
   that does not raise, and semantic actions that do not raise while
@@ -196,7 +197,7 @@ strings that cannot span lines (`Lexer.single_line_strings`), and keeps the
 result with more declarations that are not errors. The normal path of Elpi
 parses once, as before.
 
-In `one_num_type/srcElpi/tools.elpi`, cutting the end of
+In [`corpus/one_num_type/tools.elpi`](corpus/one_num_type/tools.elpi), cutting the end of
 `coq.error "There are two declarations for the same integer"` lost 45
 declarations; now there is one error, at the opening `"`.
 
