@@ -200,6 +200,10 @@ module Recovery = struct
             (* likely the beginning of the next declaration: finish the current
                one, and parsing restarts at this token *)
             complete ()
+        (* a separator or a closing bracket where a term is missing *)
+        | Tokens.CONJ | Tokens.RPAREN | Tokens.RBRACKET | Tokens.RCURLY | Tokens.PIPE
+          when reducible_productions = [] && acceptable_tokens = [] && generation_streak = 0 ->
+            GenerateHole
         | _ -> TurnIntoError
 end
 

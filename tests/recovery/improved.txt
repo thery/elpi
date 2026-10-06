@@ -2,9 +2,9 @@ files: 196 used, 2 skipped (the original does not parse cleanly)
 edit          runs  crash timeout expected lost-near  lost-far    far>0  err-chars  parsed%
 -------------------------------------------------------------------------------------------
 truncate      1927      0       0    10416         0         0        0        4.7    91.01
-del-token     1927      0       0    18149        81         1        1       11.0    94.17
-del-line      1382      0       0    16612        44         0        0        1.1    99.69
-del-chunk     1820      0       0    15347        33         0        0        2.0    99.62
-del-closer    1486      0       0    17199       381        14       13       10.7    96.44
-half-token    1927      0       0    18149        96         4        3       10.1    95.28
-TOTAL        10469      0       0    95872       635        19       17        6.8    95.79
+del-token     1927      0       0    18149        81         1        1       10.7    94.32
+del-line      1382      0       0    16612        44         0        0        1.2    99.68
+del-chunk     1820      0       0    15347        33         0        0        2.5    99.53
+del-closer    1486      0       0    17199       381        14       13       10.6    96.43
+half-token    1927      0       0    18149        96         4        3       10.0    95.32
+TOTAL        10469      0       0    95872       635        19       17        6.8    95.81

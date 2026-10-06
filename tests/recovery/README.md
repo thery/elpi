@@ -120,7 +120,10 @@ inserted ')' at 2:14       inserted '_' at 2:16        inserted '.' and '_' at 2
   2:0-2:14  Clause …         2:0-2:16  Clause …          2:0-2:11  Clause p X :- q X, _
 ```
 
-On `error-parser` these three clauses were thrown away.
+On `error-parser` these three clauses were thrown away. Likewise, a `,`, `|`
+or closing bracket where a term is missing gets a hole: `p [X|] :- q X.` is
+read as `p [X|_] :- q X.`, and `Rank1 is Rank +, int_to_nat …` has one
+error instead of an error for every token up to the end of the line.
 
 ### 3. An unfinished declaration no longer swallows the next ones
 
@@ -211,6 +214,7 @@ term or a declaration.
 |---|---|---|
 | inside a term that can be reduced | reduce | reduce |
 | `.`, end of file, or a restart point (line start, declaration keyword) | turn into an error | **finish the declaration**: reduce; else insert `.` or `)` `]` `}` if the parser accepts it; else try `.` anyway (Menhir may accept it after empty reductions, that Mastic does not list); else insert a hole; else close the declaration with a `DECL_ERROR_TOKEN` |
+| `,` `|` `)` `]` `}` where a term is missing | turn into an error | **insert a hole**: `p [X\|] :- q X.` is `p [X\|_] :- q X.` |
 | at the start of a declaration | turn into an error | turn into an error |
 | anything else | turn into an error (the declaration is lost) | turn into an error (it becomes a term) |
 
