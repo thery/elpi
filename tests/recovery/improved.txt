@@ -1,0 +1,20 @@
+files: 196 used, 2 skipped (the original does not parse cleanly)
+edit          runs  crash timeout expected lost-near  lost-far    far>0  err-chars
+----------------------------------------------------------------------------------
+truncate      1927      0       0    10416         0         0        0       41.0
+del-token     1927      4       0    18131        81         1        1       35.8
+del-line      1382      0       0    16612        44         0        0        9.2
+del-chunk     1820      1       0    15332        33         0        0       15.1
+del-closer    1486      4       0    17158       379        14       13       40.6
+half-token    1927     12       0    18075       104        15        9       30.5
+TOTAL        10469     21       0    95724       641        30       23       29.3
+
+crashes:
+      7  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: x\\..")
+      5  Elpi_parser.Parser_config.ParseError(_, "bind '\\' operator must follow a name")
+      2  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: ..")
+      2  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: (.. : ..)")
+      2  Elpi_parser.Parser_config.ParseError(_, "Mixfix directives are not supported by this parser.\n\nThe parser is based on token families.\nA family is id
+      1  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: x\\x\\..")
+      1  Elpi_parser.Parser_config.ParseError(_, "Macro name must begin with '@'")
+      1  Failure("File short.elpi not found in: /home/thery/claudeExp/mastic-work/elpi/tests/sources")

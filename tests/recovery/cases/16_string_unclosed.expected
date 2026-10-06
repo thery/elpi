@@ -1,1 +1,5 @@
-CRASH: Elpi_parser.Lexer.Error(_, "missing terminator for string starting here")
+lex error at 2:2 (missing terminator for string starting here)
+  1:0-1:3     Clause p
+  1:4-2:3     ERROR «⏎p "»  (3 pieces, 2 without text)
+  2:3-2:6     Clause abc
+  3:0-3:3     Clause p

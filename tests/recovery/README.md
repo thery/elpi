@@ -10,8 +10,8 @@ is typing.
 - `recov.py check cases` runs the hand-written battery: each `cases/*.elpi`
   is compared to its `.expected` (`--promote` to update them).
 - `recov.py fuzz FILE...` simulates editing: it damages valid programs and
-  checks what the parser recovers. The summary of a run on `tests/sources`
-  is in `baseline.txt`.
+  checks what the parser recovers. The summaries of a run on `tests/sources`
+  are in `baseline.txt` (before) and `improved.txt` (after).
 
 ## Running
 
@@ -57,60 +57,87 @@ aside). The columns:
 - `far>0`: runs with at least one far loss;
 - `err-chars`: average number of characters inside `Error` declarations.
 
-## Baseline (error-parser at 8c41fe01, Mastic at 69f6b83)
+## Results
 
-```
-edit          runs  crash timeout expected lost-near  lost-far    far>0  err-chars
-----------------------------------------------------------------------------------
-truncate      1927     35       0    10272        26         0        0       40.8
-del-token     1927      9       0    18010       156         9        9       27.8
-del-line      1382      7       0    16233        52         3        3        9.0
-del-chunk     1820     12       0    14879        39         0        0       14.0
-del-closer    1486      6       0    17150       658        28       28       83.8
-half-token    1927     42       0    17825       169         8        8       26.1
-TOTAL        10469    111       0    94369      1100        48       48       33.0
-```
+`baseline.txt` is the recovery of the `error-parser` branch (8c41fe01, Mastic
+69f6b83), `improved.txt` the recovery of this branch, measured the same way
+(10 edits of each kind for each of the 196 programs, seed 0):
 
-What the current recovery does: on an unexpected token, it forces a
-reduction when inside a `term`, otherwise it turns the token into an
-`ERROR_TOKEN`; Mastic then pops the stack into the error until it reaches a
-state that accepts `ERROR_TOKEN`, and only `decl` does. So the unit of
-recovery is the declaration: the damaged declaration becomes one
-`Decl.Error` and parsing restarts after its `.`. When there is no error the
-undamaged declarations are kept almost always (1100 + 48 losses out of 94369).
+| | error-parser | this branch |
+|---|---|---|
+| crashes (out of 10469 runs) | 92 | **21** |
+| declarations lost next to the edit | 1097 | **641** |
+| declarations lost further away | 45 (in 45 runs) | **30 (in 23 runs)** |
+| characters inside `Error` declarations, per run | 33.0 | **29.3** |
 
-Problems found:
+On the 198 programs of `tests/sources` themselves (valid ones, and the
+ones testing syntax errors), the declarations and errors are identical with
+both versions. `dune runtest` passes (`test_lexer` now accepts an
+`ERROR_TOKEN` where it expected a lexing error); the main test runner of
+Elpi could not be run here, it needs `ANSITerminal`.
 
-1. **Crashes (111 runs, 1%)**, the parser raises instead of recovering:
-   - Mastic assertion `errorResilientParser.ml:271` (26), at end of file when
-     fewer than two stack items can be merged; smallest case: a file
-     containing only `:`.
-   - lexer errors are exceptions, not `ERROR_TOKEN`s: unterminated string (24),
-     unterminated comment and unknown characters such as `$`
-     (`Failure "lexing: empty token"`, 17).
-   - errors raised by semantic actions are not recovered: `NotInProlog`
-     (e.g. `main :- (x\ x)  (x\ X).`), `bind '\' operator must
-     follow a name`, `Macro name must begin with '@'`, mixfix directives.
-   - `Invalid_argument "String.sub"` (20), not investigated yet.
-   - `accumulate` of a file that does not exist (being typed) is a failure.
-2. **Content of errors is lost**: inside a `Decl.Error` only the positions
-   survive, each piece is `('TODO', start, end)` because
-   `reduce_as_parse_error` only knows `decl`. Each error also starts with an
-   empty piece at the end of the previous declaration.
-3. **Declaration-sized errors**: one error in a long clause loses the whole
-   clause (`cases/29_error_in_long_clause`); deleting a closing bracket
-   (`del-closer`) gives errors of 84 characters on average.
-4. **Bad restarts**: after an error the tail of the clause can be parsed as a
-   new, bogus clause (`cases/04_close_paren`, `06_bad_list_tail`, `29`), and
-   an error can swallow the following declarations
-   (`typeabbrev xx` with `bool.` deleted also loses the `namespace` and the
-   `pred` after it; `pred` with its name deleted turns `:name "name1" c1.`
-   into a clause `name "name1" c1`).
-5. **No error at all** for a missing `.` between two clauses (`p 2` followed
-   by `p 3.` is the clause `p 2 p 3`), which is valid Elpi but where an
-   editor would like a warning.
-6. Unrelated: some locations have a negative column (`column -25` in
-   `findall.elpi`).
+### What the recovery of error-parser does
+
+On an unexpected token, it forces a reduction when inside a `term`, otherwise
+it turns the token into an `ERROR_TOKEN`; Mastic then pops the stack into
+the error until it reaches a state that accepts `ERROR_TOKEN`, and only
+`decl` does. So the damaged declaration becomes one `Decl.Error`. Problems:
+
+- crashes: lexer errors are exceptions (unterminated string or comment,
+  unknown character such as `$`), and at the end of the file turning `EOF`
+  into an error hits an assertion of Mastic (a file containing only `:`);
+- after the error, the rest of the clause is parsed as new, bogus clauses
+  (`p X :- q X), r.` gives an error and a clause `r`);
+- an error swallows the following declarations when the `.` is missing
+  (`typeabbrev xx` followed by `namespace foo {` and a `pred`);
+- a missing `)`, `]` or `}` turns the whole clause into an error.
+
+### What this branch changes (src/parser/parse.ml, lexer.mll.in)
+
+The grammar is unchanged, only the recovery strategy and the lexer change:
+
+1. **Restart points.** A token at the beginning of a line, or a keyword
+   that begins a declaration (`pred`, `func`, `type`, `kind`, `namespace`,
+   `typeabbrev`, `accumulate`, `shorten`, `macro`, `constraint`, `rule`),
+   that does not fit closes the current declaration as an error
+   (`GenerateHole`) and parsing restarts at that token.
+2. **Panic mode.** After a token is turned into an error, the following
+   tokens are turned into errors too, up to the next `.` or restart point,
+   and consecutive `Decl.Error` are merged into one.
+3. **Completion.** At a `.` or at the end of the file that does not fit, the
+   recovery inserts the missing `)`, `]`, `}` (and `.` at the end of the
+   file) when the automaton accepts it (`token_of_terminal` +
+   `GenerateToken`): `p X :- q (X, r.` is now the clause `p X :- q (X, r).`
+   with an error, instead of an `Error` declaration.
+4. **End of file.** When nothing can be inserted, a hole closes the current
+   declaration as an error, instead of turning `EOF` into an error (which
+   crashed Mastic).
+5. **Lexer.** An unknown character is an `ERROR_TOKEN`; an unterminated
+   string, quotation or comment is an `ERROR_TOKEN` for its opening `"`, `{{`
+   or `/*`, and lexing restarts just after it (the file is read in a string
+   for that). These errors are recorded by the lexer (`Lexer.errors`) and
+   reported with the ones of the parser, since Mastic does not report the
+   `ERROR_TOKEN`s it receives.
+
+### What remains
+
+- 21 crashes: exceptions raised by the semantic actions of the grammar
+  (`NotInProlog` from `mkApp`, `bind '\' operator must follow a name`,
+  `Macro name must begin with '@'`, mixfix directives) and an `accumulate`
+  of a file that does not exist. They need Mastic to catch exceptions of
+  semantic actions, or the actions to build errors instead of raising.
+- Inside a `Decl.Error` only positions survive (`('TODO', start, end)`):
+  `reduce_as_parse_error` only knows `decl`. Error nodes in `term` would keep
+  the content and make errors smaller than a declaration.
+- Deleting a `.` merges two clauses into a valid one (`p 2` then `p 3.` is
+  `p 2 p 3`): nothing to recover, this is most of the remaining near losses.
+- Deleting the closing `"` of a string: the string runs up to the next `"`,
+  which may be lines later (the 15 far losses of `half-token`).
+- Some far losses are an artefact of the measure: in `index2.elpi` many
+  clauses are identical, and when two of them are merged the lost one is
+  counted far away.
+- Unrelated: some locations have a negative column (`column -25` in
+  `findall.elpi`).
 
 ## The hand-written cases
 

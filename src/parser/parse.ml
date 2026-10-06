@@ -51,6 +51,27 @@ module Grammar = Grammar.Make(ParseFile)
   
 let message_of_state s = try Error_messages.message s with Not_found -> "syntax error"
 
+(* Panic mode: after an error, the tokens up to the next full stop, or up to
+   the next token at the beginning of a line, are turned into errors, so that
+   the rest of a broken clause is not parsed as a new clause *)
+let skipping = ref false
+
+let at_line_start (p : Lexing.position) = p.pos_cnum = p.pos_bol
+
+(* a token at the beginning of a line, or a keyword that begins a declaration,
+   is a good point to restart parsing *)
+let restart_point t (p : Lexing.position) =
+  at_line_start p ||
+  match t with
+  | Tokens.PRED | Tokens.FUNC | Tokens.TYPE | Tokens.KIND | Tokens.NAMESPACE
+  | Tokens.TYPEABBREV | Tokens.ACCUMULATE | Tokens.SHORTEN | Tokens.MACRO
+  | Tokens.CONSTRAINT | Tokens.RULE -> true
+  | _ -> false
+
+let error_token lexbuf =
+  Tokens.ERROR_TOKEN Mastic.Error.(mkLexError
+    (loc (Lexing.lexeme lexbuf) lexbuf.Lexing.lex_start_p lexbuf.Lexing.lex_curr_p))
+
 module ProgramParser = struct
   type ast = Ast.Program.t
   type 'a checkpoint = 'a Grammar.MenhirInterpreter.checkpoint
@@ -59,7 +80,14 @@ module ProgramParser = struct
 
   type token = Grammar.token
 
-  let token = Lexer.token C.versions
+  let token lexbuf =
+    let t = Lexer.token C.versions lexbuf in
+    if not !skipping then t
+    else match t with
+      | Tokens.EOF -> skipping := false; t
+      | Tokens.FULLSTOP -> skipping := false; error_token lexbuf
+      | _ when restart_point t lexbuf.Lexing.lex_start_p -> skipping := false; t
+      | _ -> error_token lexbuf
 end
 module GoalParser = struct
   type ast = Ast.Goal.t
@@ -97,7 +125,14 @@ module Recovery = struct
   type 'a terminal = 'a Grammar.MenhirInterpreter.terminal
   type 'a env = 'a Grammar.MenhirInterpreter.env
   type production = Grammar.MenhirInterpreter.production  
-  let token_of_terminal _ = None
+  (* the tokens the recovery may insert: closing brackets, and the final dot *)
+  let token_of_terminal : type a. a Grammar.MenhirInterpreter.terminal -> (string * token) option =
+    function
+    | T_RPAREN -> Some (")", Tokens.RPAREN)
+    | T_RBRACKET -> Some ("]", Tokens.RBRACKET)
+    | T_RCURLY -> Some ("}", Tokens.RCURLY)
+    | T_FULLSTOP -> Some (".", Tokens.FULLSTOP)
+    | _ -> None
   let match_error_token = function Tokens.ERROR_TOKEN x -> Some x | _ -> None
   let build_error_token t = Tokens.ERROR_TOKEN t
   let is_eof_token = function Tokens.EOF -> true | _ -> false
@@ -117,6 +152,12 @@ module Recovery = struct
     function
     | X (N N_term), _,_,_ -> true
     | _ -> false
+  let is_decl_start =
+    let open Grammar.MenhirInterpreter in
+    function
+    | X (N N_decl), _,_,0 -> true
+    | _ -> false
+
   let handle_unexpected_token ~productions
        ~next_token
        ~acceptable_tokens
@@ -128,12 +169,46 @@ module Recovery = struct
      | 
      _ ->
         match next_token.t with
-        | Tokens.FULLSTOP -> complete ()
-        | _ -> Mastic.ErrorResilientParser.TurnIntoError
+        | Tokens.FULLSTOP | Tokens.EOF when acceptable_tokens <> [] && generation_streak < 10 ->
+            (* complete the declaration: close the open brackets (and add the
+               final dot at the end of the file) *)
+            GenerateToken (List.hd acceptable_tokens)
+        | Tokens.EOF when generation_streak < 10 ->
+            (* the current declaration becomes an error, then EOF fits *)
+            GenerateHole
+        | Tokens.FULLSTOP | Tokens.EOF -> complete ()
+        | t when restart_point t next_token.b && generation_streak < 3
+                 && not (List.exists is_decl_start productions) ->
+            (* likely the beginning of the next declaration: the current one
+               becomes an error, and parsing restarts at this token *)
+            GenerateHole
+        | _ -> skipping := true; TurnIntoError
 end
 
 module ErProgram = Mastic.ErrorResilientParser.Make(Grammar.MenhirInterpreter)(ProgramParser)(Recovery)
 module ErGoal = Mastic.ErrorResilientParser.Make(Grammar.MenhirInterpreter)(GoalParser)(Recovery)
+
+(* consecutive errors are merged into one *)
+let rec merge_errors = function
+  | Ast.Decl.Error x :: Ast.Decl.Error y :: rest -> merge_errors (Ast.Decl.Error (Mastic.Error.merge x y) :: rest)
+  | d :: rest -> d :: merge_errors rest
+  | [] -> []
+
+(* the errors of the lexer, recorded by Lexer.errors, are added to the ones of
+   the parser; errs is in reverse order, as returned by Mastic *)
+let with_lex_errors f lexbuf =
+  Lexer.errors := [];
+  let errs, comps, ast = f lexbuf in
+  let lex = List.map (fun (p,m) -> Mastic.ErrorResilientParser.LexError(p,m)) !Lexer.errors in
+  Lexer.errors := [];
+  let pos = function Mastic.ErrorResilientParser.LexError(p,_) | ParseError(p,_) -> p.Lexing.pos_cnum in
+  let errs = List.stable_sort (fun x y -> compare (pos y) (pos x)) (lex @ errs) in
+  errs, comps, ast
+
+let parse_program lexbuf =
+  skipping := false;
+  let errs, comps, ast = with_lex_errors ErProgram.parse lexbuf in
+  errs, comps, merge_errors ast
 let () = Mastic.ErrorResilientParser.debug := Sys.getenv_opt "MASTIC_DEBUG" <> None
 let e2e = function
   | Mastic.ErrorResilientParser.LexError(loc,msg) ->
@@ -145,7 +220,7 @@ let e2e = function
         source_start = loc.Lexing.pos_cnum;
         source_stop = loc.Lexing.pos_cnum;
       } in
-      (loc,"Invalid token " ^ msg)
+      (loc,msg)
   | Mastic.ErrorResilientParser.ParseError(loc,state_id) ->
       let message = message_of_state state_id in
       let loc = {
@@ -225,11 +300,12 @@ let () =
       { Ast.Decl.file_name = filename; digest; ast = [] }
     else
       let ic = open_in filename in
-      let lexbuf = Lexing.from_channel ic in
+      (* the whole file is in the buffer, so that the lexer can go back *)
+      let lexbuf = Lexing.from_string (really_input_string ic (in_channel_length ic)) in
       let dest = cleanup_fname filename in
       lexbuf.Lexing.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = dest };
       Hashtbl.add already_parsed digest true;
-      let ast = raise_err @@ ErProgram.parse lexbuf in
+      let ast = raise_err @@ parse_program lexbuf in
       (* let ast = parse Grammar.program lexbuf in *)
       close_in ic;
       { file_name = filename; digest; ast }))
@@ -250,7 +326,7 @@ let lexing_set_position lexbuf loc =
   
 let goal_from ~loc lexbuf =
   lexing_set_position lexbuf loc;
-  raise_err @@  ErGoal.parse lexbuf
+  raise_err @@ with_lex_errors ErGoal.parse lexbuf
   (* parse Grammar.goal lexbuf *)
       
 let goal ~loc ~text =
@@ -260,7 +336,7 @@ let goal ~loc ~text =
 let program_from ~loc lexbuf =
   Hashtbl.clear already_parsed;
   lexing_set_position lexbuf loc;
-  raise_err @@  ErProgram.parse lexbuf
+  raise_err @@ parse_program lexbuf
   (* parse Grammar.program lexbuf *)
 
 let program ~file =
@@ -271,7 +347,7 @@ module Internal = struct
 let infix_SYMB = Grammar.infix_SYMB
 let prefix_SYMB = Grammar.prefix_SYMB
 let postfix_SYMB = Grammar.postfix_SYMB
-let program_resilient lexbuf = ErProgram.parse lexbuf
+let program_resilient lexbuf = parse_program lexbuf
 end
 
 end

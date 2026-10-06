@@ -1,4 +1,5 @@
 parse error at 2:13 (state 300)
+inserted '}' at 2:13
   1:0-1:3     Clause p
-  1:4-2:14    ERROR «⏎p X :- q {r X.»  (7 pieces, 6 without text)
+  2:0-2:13    Clause :-
   3:0-3:3     Clause p

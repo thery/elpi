@@ -47,6 +47,10 @@ class Decl:
         self.name = (n.group(1) or n.group(2)) if n else ""
         # positions removed: two declarations are equal if they differ only by where they are
         self.norm = re.sub(r"\s+", "", re.sub(r'file_name =\s*"[^"]*"', "", LOC.sub("", raw)))
+        if self.kind == "Accumulated":
+            # a file accumulated twice is read once: compare the file names only
+            self.norm = "Accumulated" + " ".join(
+                os.path.basename(f) for f in re.findall(r'file_name =\s*"([^"]*)"', raw))
 
 
 class Result:

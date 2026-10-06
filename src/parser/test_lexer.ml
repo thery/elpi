@@ -123,6 +123,7 @@ let rec expect s b = function
       let lnum2, bol2, bnum2, cnum2 = p.pos_lnum, p.pos_bol, b.lex_start_p.pos_cnum, p.pos_cnum in
       match sp with
         | T (tok1,lnum1,bol1,bnum1,cnum1) -> validate s (tok1,lnum1,bol1,bnum1,cnum1) (tok2,lnum2, bol2, bnum2, cnum2)
+        | E when (match tok2 with Tokens.ERROR_TOKEN _ -> true | _ -> false) -> ()  (* errors are tokens, for recovery *)
         | E -> error s cnum2 (Printf.sprintf "wrong lexing: got %s instead of error" (show tok2))
       with Failure _ ->
         match sp with

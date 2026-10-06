@@ -1,1 +1,5 @@
-CRASH: Failure("lexing: empty token")
+lex error at 2:0 (missing terminator for comment starting here)
+  1:0-1:3     Clause p
+  2:0-2:2     ERROR «/*»  (1 pieces, 0 without text)
+  2:3-2:6     Clause p
+  3:0-3:3     Clause p

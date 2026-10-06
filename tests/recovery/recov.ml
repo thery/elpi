@@ -17,7 +17,7 @@ let () =
     let resolver = Elpi_util.Util.std_resolver ~paths ()
   end) in
   let ic = open_in_bin file in
-  let lexbuf = Lexing.from_channel ic in
+  let lexbuf = Lexing.from_string (really_input_string ic (in_channel_length ic)) in
   lexbuf.Lexing.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = file };
   match P.Internal.program_resilient lexbuf with
   | errs, comps, ast ->

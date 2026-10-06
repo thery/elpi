@@ -1,3 +1,4 @@
 parse error at 2:6 (state 558)
+inserted '_' at 2:6
   1:0-1:3     Clause p
-  1:4-2:6     ERROR «⏎p X :-»  (3 pieces, 3 without text)
+  1:4-2:6     ERROR «⏎p X :-»  (4 pieces, 3 without text)
