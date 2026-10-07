@@ -1,0 +1,21 @@
+files: 218 used, 2 skipped (the original does not parse cleanly)
+edit          runs  crash decl-errs term-errs  err-chars  parsed%   lost    far
+-------------------------------------------------------------------------------
+truncate      2146     34      0.87      0.00       40.9    63.73     28      0
+del-token     2146      7      1.03      0.00       27.6    85.52    200      9
+del-line      1485      2      0.10      0.00        9.8    96.87     56      2
+del-chunk     1940      3      0.18      0.00       15.0    93.34     40      0
+del-closer    1655      5      1.14      0.00       80.7    75.22    737     30
+half-token    2146     37      0.89      0.00       24.8    85.82    215     10
+TOTAL        11518     88      0.73      0.00       32.8    82.82   1276     51
+
+crashes:
+     26  File "mastic/src/errorResilientParser.ml", line 271, characters 42-48: Assertion failed
+     23  Elpi_parser.Lexer.Error(_, "missing terminator for string starting here")
+     14  Failure("lexing: empty token")
+      8  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: ..")
+      8  Elpi_parser.Ast.Term.NotInProlog(_, "syntax error: the head of an application must be a constant or a variable, got: x\\..")
+      4  Elpi_parser.Parser_config.ParseError(_, "bind '\\' operator must follow a name")
+      3  Elpi_parser.Parser_config.ParseError(_, "Macro name must begin with '@'")
+      1  Elpi_parser.Parser_config.ParseError(_, "Mixfix directives are not supported by this parser.\n\nThe parser is based on token families.\nA family is id
+      1  Failure("File short.elpi not found in: /home/thery/claudeExp/mastic-work/elpi/tests/sources")

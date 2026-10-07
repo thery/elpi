@@ -186,6 +186,7 @@ decl:
     raise (ParseError(loc $loc,"local keyword is no longer supported"))  }
 | ignored; FULLSTOP { Program.Ignored (loc $sloc) }
 | f = fixity; FULLSTOP { error_mixfix (loc $loc) }
+| e = ERROR_TOKEN { Program.of_token e }
 
 accumulate:
 | ACCUMULATE { ".elpi" }

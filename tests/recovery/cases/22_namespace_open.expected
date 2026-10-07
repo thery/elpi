@@ -1,0 +1,7 @@
+  p 1.
+  namespace foo {
+  p 2.
+  
+clause (p 1)
+namespace foo {
+clause (p 2)

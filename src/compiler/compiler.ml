@@ -673,6 +673,8 @@ end = struct (* {{{ *)
     let rec aux_run ns blocks clauses macros kinds types tabbrs chr = function
       | Program.Ignored _ :: rest ->
           aux_run ns blocks clauses macros kinds types tabbrs chr rest
+      | Program.Error _ :: _ ->
+          error "syntax error" (* only produced by the error-resilient parser *)
       | (Program.End _ :: _ | []) as rest ->
           { body = List.rev (cl2b clauses @ blocks);
             types = (*List.rev*) types; (* we prefer the last one *)

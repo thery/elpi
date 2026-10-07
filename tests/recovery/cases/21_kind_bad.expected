@@ -1,0 +1,9 @@
+  p 1.
+  kind t.
+  ^^^^^^^
+  p 3.
+  
+syntax error at 2:6
+clause (p 1)
+ERROR Err«kind t.»
+clause (p 3)

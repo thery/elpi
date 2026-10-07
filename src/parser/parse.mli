@@ -23,6 +23,11 @@ module type Parser_w_Internals = sig
     val infix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
     val prefix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
     val postfix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
+
+    (* error-resilient parsing, with Mastic: never fails, the errors are
+       returned with the tokens inserted by the recovery *)
+    val program_resilient : Lexing.lexbuf ->
+      Mastic.ErrorResilientParser.error list * Mastic.ErrorResilientParser.completion list * Ast.Program.decl list
   end
 end
 

@@ -1,0 +1,9 @@
+  p 1.
+  pred q i:.
+  ^^^^^^^^^^
+  p 3.
+  
+syntax error at 2:9
+clause (p 1)
+ERROR Err« pred q i:.»
+clause (p 3)

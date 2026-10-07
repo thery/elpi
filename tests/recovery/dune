@@ -1,0 +1,1 @@
+(executable (name recov) (libraries elpi.parser elpi.util mastic))

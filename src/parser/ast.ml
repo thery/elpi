@@ -327,8 +327,20 @@ module Program = struct
     | Pred of (raw_attribute list,raw_attribute list) Type.t
     | TypeAbbreviation of (Func.t,raw_attribute list TypeExpression.t) TypeAbbreviation.t
     | Ignored of Loc.t
+    | Error of Mastic.Error.t
   and decl_list = decl list
   [@@deriving show]
+
+  (* error nodes, for the error-resilient parser *)
+  type Mastic.Error.t_ += Decl of decl
+
+  let Mastic.Error.Registered { of_token; build_token; _ } =
+    Mastic.Error.register "Program.decl" {
+      Mastic.Error.pp = pp_decl;
+      match_ast = (function Error x -> Some x | _ -> None);
+      match_error = (function Decl x -> Some x | _ -> None);
+      build_ast = (fun x -> Error x);
+      build_error = (fun x -> Decl x) }
 
 
 type t = decl_list parser_output [@@deriving show]

@@ -1,0 +1,3 @@
+mutants/
+*.json
+__pycache__/

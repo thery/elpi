@@ -1,0 +1,8 @@
+  p 1.
+  p X :- q X
+  p 3 :- r.
+  p 4.
+  
+clause (p 1)
+clause (:- (p X) (:- (q X p 3) r))
+clause (p 4)

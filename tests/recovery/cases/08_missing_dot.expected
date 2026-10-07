@@ -1,0 +1,6 @@
+  p 1.
+  p 2
+  p 3.
+  
+clause (p 1)
+clause (p 2 p 3)

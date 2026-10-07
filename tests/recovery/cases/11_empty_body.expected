@@ -1,0 +1,9 @@
+  p 1.
+  p X :- .
+  ^^^^^^^^
+  p 3.
+  
+syntax error at 2:7
+clause (p 1)
+ERROR Err« p X :- .»
+clause (p 3)

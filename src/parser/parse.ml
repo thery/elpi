@@ -22,6 +22,11 @@ module type Parser_w_Internals = sig
     val infix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
     val prefix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
     val postfix_SYMB : (Lexing.lexbuf -> Tokens.token) -> Lexing.lexbuf -> Ast.Func.t
+
+    (* error-resilient parsing, with Mastic: never fails, the errors are
+       returned with the tokens inserted by the recovery *)
+    val program_resilient : Lexing.lexbuf ->
+      Mastic.ErrorResilientParser.error list * Mastic.ErrorResilientParser.completion list * Ast.Program.decl list
   end
 end
 
@@ -85,6 +90,66 @@ let parse grammar lexbuf =
     } in
     raise (Parser_config.ParseError(loc,message))
   (* | Grammar.Error stateid -> raise_parse_error lexbuf stateid *)
+
+(* Error-resilient parsing, with Mastic ---------------------------------- *)
+
+module ProgramParser = struct
+  type ast = Ast.Program.decl list
+  type 'a checkpoint = 'a Grammar.MenhirInterpreter.checkpoint
+  let main = Grammar.Incremental.program
+  type token = Tokens.token
+  let token = Lexer.token C.versions
+end
+
+module Recovery = struct
+  type token = Tokens.token
+  let show_token _ = ""
+  type 'a symbol = 'a Grammar.MenhirInterpreter.symbol
+  type xsymbol = Grammar.MenhirInterpreter.xsymbol
+  type 'a terminal = 'a Grammar.MenhirInterpreter.terminal
+  type 'a env = 'a Grammar.MenhirInterpreter.env
+  type production = Grammar.MenhirInterpreter.production
+
+  let pp_symbol : type a. a option -> Format.formatter -> a symbol -> unit =
+    fun x fmt s ->
+    let open Grammar.MenhirInterpreter in
+    match x, s with
+    | Some x, N N_decl -> Ast.Program.pp_decl fmt x
+    | _ -> Format.fprintf fmt "_"
+
+  let match_error_token = function Tokens.ERROR_TOKEN x -> Some x | _ -> None
+  let build_error_token t = Tokens.ERROR_TOKEN t
+  let is_eof_token = function Tokens.EOF -> true | _ -> false
+  let token_of_terminal _ = None
+
+  (* an item of the stack folded into an error *)
+  let reduce_as_parse_error : type a. a -> a symbol -> Lexing.position -> Lexing.position -> token =
+    let open Grammar.MenhirInterpreter in
+    fun x s b e ->
+    match s with
+    | N N_decl -> Tokens.ERROR_TOKEN (Ast.Program.build_token (Mastic.Error.loc x b e))
+    | _ -> Tokens.ERROR_TOKEN Mastic.Error.(mkLexError (loc "TODO" b e))
+
+  let is_term =
+    let open Grammar.MenhirInterpreter in
+    function X (N N_term), _,_,_ -> true | _ -> false
+
+  (* the recovery strategy of the error-parser branch *)
+  let handle_unexpected_token ~productions ~next_token:_ ~acceptable_tokens:_
+      ~reducible_productions ~generation_streak:_ =
+    let open Mastic.ErrorResilientParser in
+    match reducible_productions with
+    | p :: _ when List.exists is_term productions -> Reduce p
+    | _ -> TurnIntoError
+end
+
+module ErProgram = Mastic.ErrorResilientParser.Make(Grammar.MenhirInterpreter)(ProgramParser)(Recovery)
+
+let () = Mastic.ErrorResilientParser.debug := Sys.getenv_opt "MASTIC_DEBUG" <> None
+
+let program_resilient lexbuf = ErProgram.parse lexbuf
+
+(* ------------------------------------------------------------------------- *)
 
 let already_parsed = Hashtbl.create 11
 
@@ -158,6 +223,7 @@ module Internal = struct
 let infix_SYMB = Grammar.infix_SYMB
 let prefix_SYMB = Grammar.prefix_SYMB
 let postfix_SYMB = Grammar.postfix_SYMB
+let program_resilient = program_resilient
 end
 
 end

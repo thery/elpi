@@ -1,0 +1,12 @@
+  p 1.
+  p [X|] :- q X.
+  ^^^^^^ ^^     
+  p 3.
+  
+syntax error at 2:5
+syntax error at 2:7
+clause (p 1)
+ERROR Err« p [X|]»
+ERROR Err«:-»
+clause (q X)
+clause (p 3)

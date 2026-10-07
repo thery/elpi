@@ -1,0 +1,9 @@
+  p 1.
+  pred q i:int, o:.
+  ^^^^^^^^^^^^^^^^^
+  p 3.
+  
+syntax error at 2:16
+clause (p 1)
+ERROR Err« pred q i:int, o:.»
+clause (p 3)

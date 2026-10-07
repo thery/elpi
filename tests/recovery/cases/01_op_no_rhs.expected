@@ -1,0 +1,9 @@
+  p 1.
+  p X :- X is 2 + .
+  ^^^^^^^^^^^^^^^^^
+  p 3.
+  
+syntax error at 2:16
+clause (p 1)
+ERROR Err« p X :- X is 2 + .»
+clause (p 3)

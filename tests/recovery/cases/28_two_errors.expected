@@ -1,0 +1,15 @@
+  p 1.
+  p X :- X is 2 + .
+  ^^^^^^^^^^^^^^^^^
+  p 3.
+  p Y :- q (Y.
+  ^^^^^^^^^^^^
+  p 5.
+  
+syntax error at 2:16
+syntax error at 4:11
+clause (p 1)
+ERROR Err« p X :- X is 2 + .»
+clause (p 3)
+ERROR Err« p Y :- q (Y.»
+clause (p 5)

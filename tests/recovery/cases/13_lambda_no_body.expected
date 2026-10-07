@@ -1,0 +1,9 @@
+  p 1.
+  p F :- F = x\ .
+  ^^^^^^^^^^^^^^^
+  p 3.
+  
+syntax error at 2:14
+clause (p 1)
+ERROR Err« p F :- F = x\ .»
+clause (p 3)

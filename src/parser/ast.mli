@@ -201,8 +201,13 @@ module Program : sig
     | Pred of (raw_attribute list,raw_attribute list) Type.t
     | TypeAbbreviation of (Func.t,raw_attribute list TypeExpression.t) TypeAbbreviation.t
     | Ignored of Loc.t
+    | Error of Mastic.Error.t
   and decl_list = decl list
   [@@ deriving show]
+
+  (* error nodes, for the error-resilient parser *)
+  val of_token : Mastic.Error.t -> decl
+  val build_token : decl Mastic.Error.located -> Mastic.Error.t
 
   type t = decl_list parser_output
   [@@ deriving show]
