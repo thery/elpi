@@ -1,9 +1,10 @@
   p 1.
   pred q i:int, o:.
-  ^^^^^^^^^^^^^^^^^
+                  ^
   p 3.
   
 syntax error at 2:16
+inserted _ at 2:16
 clause (p 1)
-ERROR Err« pred q i:int, o:.»
+pred q (pred i:int, o:Err«»)
 clause (p 3)

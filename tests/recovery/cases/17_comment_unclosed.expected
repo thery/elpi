@@ -1,2 +1,10 @@
-X	Failure("lexing: empty token")
-exit 2
+  p 1.
+  /* p 2.
+  ^^     
+  p 3.
+  
+lexical error at 2:0: missing terminator for comment starting here
+clause (p 1)
+ERROR Err«/*»
+clause (p 2)
+clause (p 3)

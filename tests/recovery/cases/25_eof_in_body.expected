@@ -1,6 +1,8 @@
   p 1.
   p X :- q X,
-  ^^^^^^^^^^^
+            ^
 syntax error at 2:11
+inserted _ at 2:11
+inserted . at 2:11
 clause (p 1)
-ERROR Err« p X :- q X,»
+clause (:- (p X) (, (q X) Err«»))

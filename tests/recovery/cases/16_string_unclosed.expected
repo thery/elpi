@@ -1,2 +1,9 @@
-X	Elpi_parser.Lexer.Error(_, "missing terminator for string starting here")
-exit 2
+  p 1.
+  p "abc.
+    ^    
+  p 3.
+  
+lexical error at 2:2: missing terminator for string starting here
+clause (p 1)
+clause (p Err«"» abc)
+clause (p 3)

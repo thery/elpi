@@ -80,6 +80,7 @@ type t = Tokens.token =
   | EOF
   | DOTS
   | DIV
+  | DECL_ERROR_TOKEN of Mastic.Error.t
   | DDARROWBANG
   | DDARROW
   | DATA

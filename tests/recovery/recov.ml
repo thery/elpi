@@ -46,6 +46,7 @@ let rec pp_term (t : Term.t) =
   | Term.Quoted { data; _ } -> "{{" ^ data ^ "}}"
   | Term.Cast (t, ty) -> "(" ^ pp_term t ^ " : " ^ pp_type ty ^ ")"
   | Term.Parens t -> pp_term t
+  | Term.Err e -> add_error "term" e; pp_err e
 
 and pp_type : 'a. 'a TypeExpression.t -> string = fun ty ->
   match ty.tit with
@@ -55,10 +56,13 @@ and pp_type : 'a. 'a TypeExpression.t -> string = fun ty ->
       "(pred " ^ String.concat ", " (List.map (fun (m, t) ->
         (match m with Util.Mode.Input -> "i:" | Util.Mode.Output -> "o:") ^ pp_type t) args) ^ ")"
   | TypeExpression.TArr (a, b) -> "(" ^ pp_type a ^ " -> " ^ pp_type b ^ ")"
+  | TypeExpression.TErr e -> add_error "type" e; pp_err e
 
 let pp_attributes = function
   | [] -> ""
-  | l -> String.concat " " (List.map (fun a -> ":" ^ one_line (show_raw_attribute a)) l) ^ " "
+  | l -> String.concat " " (List.map (function
+      | AttributeError e -> add_error "attribute" e; ":" ^ pp_err e
+      | a -> ":" ^ one_line (show_raw_attribute a)) l) ^ " "
 
 let pp_decl (d : Program.decl) =
   match d with

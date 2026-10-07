@@ -1,13 +1,6 @@
   p :- X is + 2 * 3.
-  ^^^^^^^^^^^ ^ ^ ^^
+            ^       
   
 syntax error at 1:10
-syntax error at 1:12
-syntax error at 1:14
-syntax error at 1:16
-syntax error at 1:17
-ERROR Err«p :- X is +»
-ERROR Err«2»
-ERROR Err«*»
-ERROR Err«3»
-ERROR Err«.»
+inserted _ at 1:10
+clause (:- p (is X (+ Err«» (* 2 3))))

@@ -1,9 +1,9 @@
   p 1.
   p X :- q {r X.
-  ^^^^^^^^^^^^^^
   p 3.
   
 syntax error at 2:13
+inserted } at 2:13
 clause (p 1)
-ERROR Err« p X :- q {r X.»
+clause (:- (p X) (q (%spill (r X))))
 clause (p 3)

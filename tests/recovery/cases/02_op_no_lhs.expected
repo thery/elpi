@@ -1,13 +1,10 @@
   p 1.
   p X :- X is * 3.
-  ^^^^^^^^^^^^^ ^^
+              ^   
   p 3.
   
 syntax error at 2:12
-syntax error at 2:14
-syntax error at 2:15
+inserted _ at 2:12
 clause (p 1)
-ERROR Err« p X :- X is *»
-ERROR Err«3»
-ERROR Err«.»
+clause (:- (p X) (is X (* Err«» 3)))
 clause (p 3)

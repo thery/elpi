@@ -1,12 +1,9 @@
   p 1.
   p X :- q X), r.
-  ^^^^^^^^^^^^   
+         ^^^^    
   p 3.
   
 syntax error at 2:10
-syntax error at 2:11
 clause (p 1)
-ERROR Err« p X :- q X)»
-ERROR Err«,»
-clause r
+clause (:- (p X) (, Err«q X)» r))
 clause (p 3)

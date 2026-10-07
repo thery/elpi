@@ -1,20 +1,16 @@
   p 1.
   p X :-
-  ^^^^^^
     q X,
-  ^^^^^^
+    ^^^^
     r X,
   ^^^^^^
     s X X ),
-  ^^^^^^^^^^
+  ^^^^^^^^^ 
     t X,
     u X.
   p 3.
   
 syntax error at 5:8
-syntax error at 5:9
 clause (p 1)
-ERROR Err« p X :-   q X,   r X,   s X X )»
-ERROR Err«,»
-clause (, (t X) (u X))
+clause (:- (p X) (, Err«q X,   r X,   s X X )» (t X) (u X)))
 clause (p 3)

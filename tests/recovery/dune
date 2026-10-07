@@ -1,1 +1,1 @@
-(executable (name recov) (libraries elpi.parser elpi.util mastic))
+(executables (names recov strict) (modules recov strict) (libraries elpi.parser elpi.util mastic))

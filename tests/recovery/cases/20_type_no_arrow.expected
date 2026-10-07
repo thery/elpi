@@ -1,9 +1,10 @@
   p 1.
   type c int ->.
-  ^^^^^^^^^^^^^^
+               ^
   p 3.
   
 syntax error at 2:13
+inserted _ at 2:13
 clause (p 1)
-ERROR Err« type c int ->.»
+type c (int -> Err«»)
 clause (p 3)

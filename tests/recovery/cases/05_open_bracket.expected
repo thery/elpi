@@ -4,6 +4,9 @@
   p 3.
   
 syntax error at 2:13
+inserted _ at 2:13
+inserted _ at 2:13
+inserted (error) at 2:13
 clause (p 1)
 ERROR Err« p [X|Y :- q X.»
 clause (p 3)

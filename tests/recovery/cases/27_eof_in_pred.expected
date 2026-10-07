@@ -1,6 +1,8 @@
   p 1.
   pred q i:
-  ^^^^^^^^^
+          ^
 syntax error at 2:9
+inserted _ at 2:9
+inserted . at 2:9
 clause (p 1)
-ERROR Err« pred q i:»
+pred q (pred i:Err«»)

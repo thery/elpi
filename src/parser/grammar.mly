@@ -32,34 +32,35 @@ let desugar_multi_binder loc (t : Ast.Term.t) =
       let ty = match last.it with
         | Lam (_,_,ty,_) -> ty
         | Const x when Func.is_uvar_name x -> None
-        | _ -> raise (ParseError(loc,"The last argument of 'pi' or 'sigma' must be a function or a unification variable, while it is: " ^ Ast.Term.show last)) in
+        | _ -> ignore (Term.defer loc (ParseError(loc,"The last argument of 'pi' or 'sigma' must be a function or a unification variable, while it is: " ^ Ast.Term.show last))); None in
       let names = List.map (function
         | { it = Const x; loc } -> Func.show x, loc
-        | { it = (App _ | Lam _ | CData _ | Quoted _ | Cast _ | Parens _) } ->
-            raise (ParseError(loc,"Only names are allowed after 'pi' or 'sigma'"))) rev_rest in
+        | { it = (App _ | Lam _ | CData _ | Quoted _ | Cast _ | Parens _ | Err _) } ->
+            ignore (Term.defer loc (ParseError(loc,"Only names are allowed after 'pi' or 'sigma'"))); "_", loc) rev_rest in
       let body = mkApp (Loc.merge binder.loc last.loc) [binder;last] in
       List.fold_left (fun bo (name,nloc) ->
         let loc = Loc.merge nloc bo.loc in
         mkApp loc [binder;mkLam loc name nloc ty bo]) body names
-  | (App _ | Const _ | Lam _ | CData _ | Quoted _ | Cast _ | Parens _) -> t
+  | (App _ | Const _ | Lam _ | CData _ | Quoted _ | Cast _ | Parens _ | Err _) -> t
 ;;
 
 let desugar_macro loc lhs rhs =
   match lhs, rhs with
   | { it = Const name }, body ->
       if ((Func.show name).[0] != '@') then
-        raise (ParseError(loc,"Macro name must begin with '@'"));
+        ignore (Term.defer loc (ParseError(loc,"Macro name must begin with '@'")));
       name, body
   | { it = App({ it = Const name },args) }, body ->
       if ((Func.show name).[0] != '@') then
-        raise (ParseError(loc,"Macro name must begin with '@'"));
+        ignore (Term.defer loc (ParseError(loc,"Macro name must begin with '@'")));
       let names = List.map (function
         | { it = Const x; loc } -> Func.show x, loc
-        | { it = (App _ | Lam _ | CData _ | Quoted _ | Cast _ | Parens _) } ->
-              raise (ParseError(loc,"Macro parameters must be names"))) args in
+        | { it = (App _ | Lam _ | CData _ | Quoted _ | Cast _ | Parens _ | Err _) } ->
+              ignore (Term.defer loc (ParseError(loc,"Macro parameters must be names"))); "_", loc) args in
       name, List.fold_right (fun (name,nloc) b -> mkLam (Loc.merge nloc b.loc) name nloc None b) names body
   | _ ->
-        raise (ParseError(loc,"Illformed macro left hand side"))
+        ignore (Term.defer loc (ParseError(loc,"Illformed macro left hand side")));
+        Func.from_string "@error", rhs
 ;;
 
 let mkParens_if_impl_or_conj loc t =
@@ -100,7 +101,7 @@ let binder l (loc,ty,b) =
   | (name, bloc) :: rest ->
       let lloc = Loc.merge bloc b.loc in
       List.rev_map (fun (n,l) -> mkConst l n) rest @ [mkLam lloc (Func.show name) bloc ty b]
-  | _ -> raise (ParseError(loc,"bind '\\' operator must follow a name"))
+  | _ -> [Term.defer loc (ParseError(loc,"bind '\\' operator must follow a name"))]
 
 let binder1 l = function
   | None -> l
@@ -109,7 +110,7 @@ let binder1 l = function
       | { it = Const name; loc = bloc } :: rest ->
         let lloc = Loc.merge bloc b.loc in
         List.rev rest @ [mkLam lloc (Func.show name) bloc ty b]
-      | _ -> raise (ParseError(loc,"bind '\\' operator must follow a name"))
+      | _ -> l @ [Term.defer loc (ParseError(loc,"bind '\\' operator must follow a name"))]
 
 ;;
 
@@ -180,13 +181,17 @@ decl:
 | ext = accumulate; l = separated_nonempty_list(CONJ,filename); FULLSTOP {
     Program.Accumulated(loc $sloc,List.(map (fun x ->
       let cwd = Filename.dirname (loc $sloc).source_name in
-      C.parse_file ~cwd (x ^ ext)) l))
+      (* a file that does not exist (yet) is an error of this declaration *)
+      try C.parse_file ~cwd (x ^ ext)
+      with Failure _ as e when !Term.deferring ->
+        ignore (Term.defer (loc $sloc) e); { file_name = x; digest = Digest.string x; deps = []; ast = [] }) l))
   }
 | LOCAL; l = separated_nonempty_list(CONJ,constant); option(type_term); FULLSTOP {
-    raise (ParseError(loc $loc,"local keyword is no longer supported"))  }
+    ignore (Term.defer (loc $loc) (ParseError(loc $loc,"local keyword is no longer supported"))); Program.Ignored (loc $loc) }
 | ignored; FULLSTOP { Program.Ignored (loc $sloc) }
-| f = fixity; FULLSTOP { error_mixfix (loc $loc) }
+| f = fixity; FULLSTOP { try error_mixfix (loc $loc) with e when !Term.deferring -> ignore (Term.defer (loc $loc) e); Program.Ignored (loc $loc) }
 | e = ERROR_TOKEN { Program.of_token e }
+| e = DECL_ERROR_TOKEN { Program.of_token e }
 
 accumulate:
 | ACCUMULATE { ".elpi" }
@@ -266,7 +271,7 @@ type_:
   SYMBOL; names = separated_nonempty_list(CONJ,constant); option(COLON); ty = type_term; o=option(external_ref) {
     match attributes, o, names with
     | [External None], Some _, [name] -> [{ Type.loc=loc $sloc; attributes = [External o]; name ; ty }]
-    | _, Some _, _ -> raise (ParseError (loc $loc, "Only one symbol with a named external reference can be marked with the external attribute at a time."))
+    | _, Some _, _ -> ignore (Term.defer (loc $loc) (ParseError (loc $loc, "Only one symbol with a named external reference can be marked with the external attribute at a time."))); List.map (fun n -> { Type.loc=loc $sloc; attributes; name = n; ty }) names
     | _, None, _ -> List.map (fun n -> { Type.loc=loc $sloc; attributes; name = n; ty }) names
 }
 // | EXTERNAL; SYMBOL; name = constant; option(COLON); t = type_term; o=option(external_ref) {
@@ -278,10 +283,12 @@ external_ref:
 
 atype_term:
 | c = constant { { tloc = loc $loc; tit = TConst (fix_church c) } }
+| e = ERROR_TOKEN { TypeExpression.of_token e }
 | LPAREN; t = type_term; RPAREN { t }
 | LPAREN; t = anonymous_pred; RPAREN { t }
 fotype_term:
 | c = constant { { tloc = loc $loc; tit = TConst (fix_church c) } }
+| e = ERROR_TOKEN { TypeExpression.of_token e }
 | hd = constant; args = nonempty_list(atype_term) { { tloc = loc $loc; tit = TApp (hd, List.hd args, List.tl args) } }
 | LPAREN; t = anonymous_pred; RPAREN { t }
 | LPAREN; t = type_term; RPAREN { t }
@@ -291,6 +298,7 @@ type_term:
 
 kind_term:
 | TYPE { { tloc = loc $loc; tit = TConst (Func.from_string "type") } }
+| e = ERROR_TOKEN { TypeExpression.of_token e }
 | x = TYPE; ARROW; t = kind_term { { tloc = loc $loc; tit = TArr ({ tloc = loc $loc(x); tit = TConst (Func.from_string "type") }, t) } }
 
 macro:
@@ -396,6 +404,7 @@ attribute:
 | INDEX; LPAREN; l = nonempty_list(indexing) ; RPAREN; o = option(STRING) { Index (l,o) }
 | NOOC { NoOC }
 | AUTOSPILL { AutoSpill }
+| e = ERROR_TOKEN { attribute_of_token e }
 
 indexing:
 | FRESHUV { 0 }
@@ -421,6 +430,7 @@ closed_term:
 | LBRACKET; l = list_items_tail;  {  mkSeq ~loc:(loc $loc) l }
 | l = LCURLY; t = term; RCURLY { mkAppF (loc $loc) (loc $loc(l),Func.spillf) [t] }
 | t = head_term { t }
+| e = ERROR_TOKEN { Term.of_token e }
 
 /*
 Here we set the precedence to the 'constant' production of head_term
@@ -489,6 +499,7 @@ clause_hd_term:
 
 clause_hd_closed_term:
 | t = constant { false, mkConst (loc $sloc) t }
+| e = ERROR_TOKEN { false, Term.of_token e }
 | LPAREN; t = term; RPAREN { false, mkParens_if_impl_or_conj (loc $loc) t }
 
 clause_hd_open_term:

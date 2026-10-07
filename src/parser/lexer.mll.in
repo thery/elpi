@@ -5,6 +5,29 @@
     open Elpi_lexer_config.Tokens
     exception Error of Lexing.position * string
 
+    (* Error recovery (Parse.Internal.program_resilient): instead of raising,
+       the lexer returns ERROR_TOKEN and records the error. An unterminated
+       string, quotation or comment is an error for its opening delimiter,
+       and lexing restarts just after it (the buffer must hold that text) *)
+    let recovering = ref false
+    let single_line_strings = ref false
+    let errors : (Lexing.position * string) list ref = ref []
+
+    let error_token msg text b e =
+      errors := (b, msg) :: !errors;
+      ERROR_TOKEN Mastic.Error.(mkLexError (loc text b e))
+
+    let lex_error lexbuf (start : Lexing.position) opening msg =
+      let open Lexing in
+      let idx = start.pos_cnum - lexbuf.lex_abs_pos in
+      if not !recovering || idx < String.length opening || idx > lexbuf.lex_buffer_len then raise (Error(start, msg));
+      let b = { start with pos_cnum = start.pos_cnum - String.length opening } in
+      lexbuf.lex_curr_pos <- idx;
+      lexbuf.lex_start_pos <- idx - String.length opening;
+      lexbuf.lex_curr_p <- start;
+      lexbuf.lex_start_p <- b;
+      error_token msg opening b start
+
     let real_skip b n =
       let open Lexing in
       b.lex_curr_p <- { b.lex_curr_p with pos_cnum = b.lex_curr_p.pos_cnum + n };
@@ -96,14 +119,17 @@ and skip_lines v skipno = parse
 | eof { token v lexbuf }
 | _ { skip_lines v skipno lexbuf }
 
-and multilinecomment v nest = parse
-| '\n' { new_line lexbuf; multilinecomment v nest lexbuf }
-| "*/" { if nest = 0 then token v lexbuf else multilinecomment v (nest - 1) lexbuf }
-| "/*" { multilinecomment v (nest+1) lexbuf }
-| _ { multilinecomment v nest lexbuf }
+and multilinecomment v start nest = parse
+| '\n' { new_line lexbuf; multilinecomment v start nest lexbuf }
+| "*/" { if nest = 0 then token v lexbuf else multilinecomment v start (nest - 1) lexbuf }
+| "/*" { multilinecomment v start (nest+1) lexbuf }
+| _ { multilinecomment v start nest lexbuf }
+| eof { if !recovering then lex_error lexbuf start "/*" "missing terminator for comment starting here"
+         else failwith "lexing: empty token" (* as without this rule *) }
 
 and string start b = parse
-| '\n'     { Buffer.add_char b '\n'; new_line lexbuf; string start b lexbuf }
+| '\n'     { if !single_line_strings then lex_error lexbuf start "\"" "missing terminator for string starting here"
+             else (Buffer.add_char b '\n'; new_line lexbuf; string start b lexbuf) }
 | '\\' 'n' { Buffer.add_char b '\n'; string start b lexbuf }
 | '\\' 'b' { Buffer.add_char b '\b'; string start b lexbuf }
 | '\\' 't' { Buffer.add_char b '\t'; string start b lexbuf }
@@ -113,13 +139,13 @@ and string start b = parse
 | '"' '"'  { Buffer.add_char b '"';  string start b lexbuf }
 | '"' { STRING (Buffer.contents b) }
 | _ # '"' as c { Buffer.add_char b c; string start b lexbuf }
-| eof { raise (Error(start,"missing terminator for string starting here")) }
+| eof { lex_error lexbuf start "\"" "missing terminator for string starting here" }
 
 and quoted start n = parse
 | '{' { quoted start (n+1) lexbuf }
 | '\n' { let b = Buffer.create 80 in Buffer.add_char b '\n'; new_line lexbuf; quoted_inner start b n 0 lexbuf }
 | _ as c { let b = Buffer.create 80 in Buffer.add_char b c; quoted_inner start b n 0 lexbuf }
-| eof { raise (Error(start,"missing terminator for quotation starting here")) }
+| eof { lex_error lexbuf start "{{" "missing terminator for quotation starting here" }
 
 and quoted_inner start b n l = parse
 | '}' {
@@ -139,7 +165,7 @@ and quoted_inner start b n l = parse
   }
 | '\n' { Buffer.add_char b '\n'; new_line lexbuf; quoted_inner start b n l lexbuf }
 | _ as c { Buffer.add_char b c; quoted_inner start b n l lexbuf }
-| eof { raise (Error(start,"missing terminator for quotation starting here")) }
+| eof { lex_error lexbuf start "{{" "missing terminator for quotation starting here" }
 
 and lookahead_close b n = parse
 | '}' {
@@ -168,7 +194,7 @@ and token v = parse
 | ( ' ' | '\t' | '\r' ) { token v lexbuf }
 | '\n' { new_line lexbuf; token v lexbuf }
 | '%' { linecomment v lexbuf }
-| "/*" { multilinecomment v 0 lexbuf }
+| "/*" { multilinecomment v lexbuf.lex_curr_p 0 lexbuf }
 | "." { FULLSTOP }
 | "_" idchar + as c { CONSTANT c }
 | "_" { FRESHUV }
@@ -240,3 +266,5 @@ and token v = parse
 | ".." { DOTS }
 | '@' idcharstar as c { CONSTANT c }
 | eof { EOF }
+| _ as c { if !recovering then error_token ("unexpected character " ^ String.make 1 c) (String.make 1 c) lexbuf.lex_start_p lexbuf.lex_curr_p
+           else failwith "lexing: empty token" }

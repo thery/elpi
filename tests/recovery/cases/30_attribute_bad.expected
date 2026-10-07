@@ -1,9 +1,8 @@
   :name 3
-  ^^^^^^^
+   ^^^^^^
   p 1.
   p 2.
   
 syntax error at 1:6
-ERROR Err«:name 3»
-clause (p 1)
+clause :Err«name 3» (p 1)
 clause (p 2)

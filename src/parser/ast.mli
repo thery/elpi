@@ -64,7 +64,13 @@ type raw_attribute =
   | Untyped
   | NoOC
   | AutoSpill
+  | AttributeError of Mastic.Error.t
 [@@ deriving show]
+
+(* error nodes, for the error-resilient parser *)
+val loc_of_error : Mastic.Error.t -> Loc.t
+val attribute_of_token : Mastic.Error.t -> raw_attribute
+val attribute_build_token : raw_attribute Mastic.Error.located -> Mastic.Error.t
 
 module TypeExpression : sig
 
@@ -73,8 +79,13 @@ module TypeExpression : sig
    | TApp of Func.t * 'attribute t * 'attribute t list
    | TPred of 'attribute * (Mode.t * 'attribute t) list * bool (* true = variadic *)
    | TArr of 'attribute t * 'attribute t
+   | TErr of Mastic.Error.t
    and 'a t = { tit : 'a t_; tloc : Loc.t }
    [@@ deriving show, ord]
+
+  (* error nodes, for the error-resilient parser *)
+  val of_token : Mastic.Error.t -> raw_attribute list t
+  val build_token : raw_attribute list t Mastic.Error.located -> Mastic.Error.t
 
 end
 
@@ -89,11 +100,22 @@ module Term : sig
    | Quoted of quote
    | Cast of t * typ
    | Parens of t
+   | Err of Mastic.Error.t
   and t = { it : t_; loc : Loc.t }
   and quote = { qloc : Loc.t; data : string; kind : string option }
   [@@ deriving show, ord]
 
   exception NotInProlog of Loc.t * string
+
+  (* error nodes, for the error-resilient parser *)
+  val of_token : Mastic.Error.t -> t
+  val build_token : t Mastic.Error.located -> Mastic.Error.t
+
+  (* when !deferring, the exception is recorded in deferred and an error term
+     is returned; otherwise it is raised *)
+  val deferring : bool ref
+  val deferred : exn list ref
+  val defer : Loc.t -> exn -> t
 
   (* Can raise NotInProlog *)
   val mkApp : Loc.t -> t list -> t

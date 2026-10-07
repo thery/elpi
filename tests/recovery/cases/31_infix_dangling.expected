@@ -1,9 +1,10 @@
   p 1.
   p X :- q X; .
-  ^^^^^^^^^^^^^
+              ^
   p 3.
   
 syntax error at 2:12
+inserted _ at 2:12
 clause (p 1)
-ERROR Err« p X :- q X; .»
+clause (:- (p X) (; (q X) Err«»))
 clause (p 3)

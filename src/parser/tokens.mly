@@ -21,6 +21,7 @@
 %token IS
 %token <char> IO_COLON
 %token <Mastic.Error.t> ERROR_TOKEN
+%token <Mastic.Error.t> DECL_ERROR_TOKEN
 %token <char> IO
 %token ARROW
 %token DARROW
