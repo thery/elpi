@@ -1,0 +1,78 @@
+{
+  "name": "elpi-lsp",
+  "displayName": "Elpi LSP (experimental)",
+  "description": "Language server client for Elpi: diagnostics, hover (types) and go to definition",
+  "version": "0.0.1",
+  "publisher": "lpcic",
+  "license": "LGPL-2.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LPCIC/elpi"
+  },
+  "homepage": "https://github.com/LPCIC/elpi",
+  "keywords": ["elpi", "lambda Prolog", "lsp"],
+  "categories": ["Programming Languages", "Linters"],
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:elpi",
+    "workspaceContains:**/*.elpi"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "elpi",
+        "aliases": ["Elpi", "elpi"],
+        "extensions": [".elpi"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "elpi-lsp.restart",
+        "category": "Elpi LSP",
+        "title": "Restart server"
+      },
+      {
+        "command": "elpi-lsp.showOutput",
+        "category": "Elpi LSP",
+        "title": "Show output"
+      }
+    ],
+    "configuration": {
+      "title": "Elpi LSP",
+      "properties": {
+        "elpi-lsp.path": {
+          "type": "string",
+          "default": "elpi-lsp",
+          "markdownDescription": "Path to the `elpi-lsp` server executable (default: `elpi-lsp` looked up in `$PATH`). A leading `~/` is expanded. Example: `/home/thery/claudeExp/mastic-work/_build/install/default/bin/elpi-lsp`."
+        },
+        "elpi-lsp.args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "Extra command line arguments passed to the server."
+        },
+        "elpi-lsp.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "scope": "window",
+          "markdownDescription": "Trace the LSP messages exchanged with the server (shown in the *Elpi LSP Trace* output channel)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "node test/check_extension.js",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.1"
+  }
+}
