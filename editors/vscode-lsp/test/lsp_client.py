@@ -222,12 +222,18 @@ class Server:
     # ---- high level ------------------------------------------------------
 
     def notify(self, method, params):
-        self._write({"jsonrpc": "2.0", "method": method, "params": params})
+        msg = {"jsonrpc": "2.0", "method": method}
+        if params is not None:  # params: void (shutdown, exit) => omitted
+            msg["params"] = params
+        self._write(msg)
 
     def request(self, method, params, allow_error=False):
         rid = self.next_id
         self.next_id += 1
-        self._write({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
+        msg = {"jsonrpc": "2.0", "id": rid, "method": method}
+        if params is not None:
+            msg["params"] = params
+        self._write(msg)
         deadline = time.monotonic() + self.timeout
         while True:
             msg = self._next(deadline, "the answer to %s (id %d)" % (method, rid))

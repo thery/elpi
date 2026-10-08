@@ -47,7 +47,7 @@
         "elpi-lsp.path": {
           "type": "string",
           "default": "elpi-lsp",
-          "markdownDescription": "Path to the `elpi-lsp` server executable (default: `elpi-lsp` looked up in `$PATH`). A leading `~/` is expanded."
+          "markdownDescription": "Path to the `elpi-lsp` server executable (default: `elpi-lsp` looked up in `$PATH`). A leading `~/` is expanded. Example: `/home/thery/claudeExp/mastic-work/_build/install/default/bin/elpi-lsp`."
         },
         "elpi-lsp.args": {
           "type": "array",
