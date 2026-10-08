@@ -92,6 +92,7 @@ val global_name_to_constant : State.t -> string -> constant
 
 module IntervalTree : sig
   type 'a t
+  val of_list : (Ast.Loc.t * 'a) list -> 'a t
   val find : Ast.Loc.t -> 'a t -> (Ast.Loc.t * 'a) list
   val pp : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a t -> unit
 end

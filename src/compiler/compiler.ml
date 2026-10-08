@@ -2674,19 +2674,73 @@ let relocate_closed_term ~from ~to_ t =
 
 
 module IntervalTree = struct
-  type 'a t = (Ast.Loc.t * 'a) list
+  (* An interval tree. The intervals of each file are sorted by their start
+     and stored in a balanced binary tree, where each node also knows the
+     largest end in its subtree. [find] visits only the subtrees that can hold
+     an interval overlapping the query: O(log n + k) for k results, instead of
+     scanning all the intervals. *)
+  type 'a items = (Ast.Loc.t * 'a) list
   [@@deriving show]
 
-  let overlap { Ast.Loc.source_name; source_start; source_stop } (l,_) =
-    l.Ast.Loc.source_name = source_name &&
-    not (l.Ast.Loc.source_start > source_stop || l.Ast.Loc.source_stop < source_start)
+  type 'a node =
+    | Leaf
+    | Node of { left : 'a node; loc : Ast.Loc.t; data : 'a; index : int; max_stop : int; right : 'a node }
+
+  module SM = Map.Make (String)
+
+  type 'a t = { files : 'a node SM.t; items : 'a items (* as given, for pp *) }
+
+  let max_stop = function Leaf -> min_int | Node { max_stop } -> max_stop
+
+  (* a balanced tree of the intervals a.(lo) .. a.(hi-1), sorted by start *)
+  let rec build a lo hi =
+    if lo >= hi then Leaf
+    else
+      let mid = (lo + hi) / 2 in
+      let index, ((loc : Ast.Loc.t), data) = a.(mid) in
+      let left = build a lo mid and right = build a (mid + 1) hi in
+      Node { left; loc; data; index; right;
+             max_stop = max loc.source_stop (max (max_stop left) (max_stop right)) }
+
+  let of_list items =
+    let by_file = Hashtbl.create 7 in
+    List.iteri (fun i (((loc : Ast.Loc.t), _) as x) ->
+        Hashtbl.replace by_file loc.source_name
+          ((i, x) :: Option.value ~default:[] (Hashtbl.find_opt by_file loc.source_name)))
+      items;
+    let files = Hashtbl.fold (fun name l files ->
+        let a = Array.of_list l in
+        Array.stable_sort (fun (i, ((l1 : Ast.Loc.t), _)) (j, ((l2 : Ast.Loc.t), _)) ->
+            compare (l1.source_start, i) (l2.source_start, j)) a;
+        SM.add name (build a 0 (Array.length a)) files) by_file SM.empty in
+    { files; items }
+
+  let pp f fmt t = pp_items f fmt t.items
 
   let smaller ({ Ast.Loc.source_start = b1; source_stop = e1 },_) ({ Ast.Loc.source_start = b2; source_stop = e2 },_) =
     let d1 = e1 - b1 in
     let d2 = e2 - b2 in
     d1 - d2
 
-  let find loc l = List.filter (overlap loc) l |> List.sort smaller
+  (* the intervals overlapping [loc], smallest first (in the order they were
+     given when they have the same size, as with the former list) *)
+  let find ({ Ast.Loc.source_name; source_start; source_stop } : Ast.Loc.t) t =
+    match SM.find_opt source_name t.files with
+    | None -> []
+    | Some tree ->
+        let acc = ref [] in
+        let rec go = function
+          | Leaf -> ()
+          | Node { left; loc; data; index; max_stop; right } ->
+              if max_stop >= source_start then begin
+                go left;
+                if loc.source_start <= source_stop then begin
+                  if loc.source_stop >= source_start then acc := (index, (loc, data)) :: !acc;
+                  go right
+                end
+              end in
+        go tree;
+        List.sort (fun (i, _) (j, _) -> compare i j) !acc |> List.map snd |> List.sort smaller
 end
 
 type type_ = Compiler_data.TypeAssignment.ty
@@ -2740,7 +2794,7 @@ let info_of_clause ~types { Ast.Clause.body } =
 let hover (u : checked_compilation_unit) =
   let { CheckedFlat.clauses } = u.checked_code in
   (* This signature does not contain all types ... *)
-  List.map (info_of_clause ~types:u.checked_code.signature.Assembled.types) clauses |> List.flatten
+  List.map (info_of_clause ~types:u.checked_code.signature.Assembled.types) clauses |> List.flatten |> IntervalTree.of_list
 
 (* Hover information for the type expressions of the declarations (pred,
    type, type abbreviations) of a scoped program, which [hover] does not

@@ -21,7 +21,7 @@ type diagnostic = {
    expressions of the declarations (Compile.hover_types) *)
 type hover = {
   terms : Compile.info Compile.IntervalTree.t list;
-  types : (Ast.Loc.t * string * Ast.Loc.t option) list;
+  types : (string * Ast.Loc.t option) Compile.IntervalTree.t;
 }
 
 type result = {
@@ -108,7 +108,9 @@ let compile_program ast =
         let u = Compile.unit ~elpi ~base sp in
         Compile.extend ~base u, Compile.hover u :: hover)
       (base, []) sps in
-  { terms; types = List.concat_map Compile.hover_types sps }
+  { terms;
+    types = Compile.IntervalTree.of_list
+        (List.concat_map (fun sp -> List.map (fun (l, t, d) -> l, (t, d)) (Compile.hover_types sp)) sps) }
 
 (* An error of the compiler, as a location and a message *)
 let error_of_exn = function
@@ -188,9 +190,8 @@ let entries ~path off (hover : hover) =
     |> List.map (fun (l, { Compile.type_; defined }) ->
         l, Option.map (Format.asprintf "%a" Compile.pp_type_) type_, defined) in
   let types =
-    List.filter_map (fun ((l : Ast.Loc.t), text, defined) ->
-        if l.source_name = path && l.source_start <= off && off <= l.source_stop
-        then Some (l, Some text, defined) else None) hover.types in
+    Compile.IntervalTree.find loc hover.types
+    |> List.map (fun (l, (text, defined)) -> l, Some text, defined) in
   terms @ types
 
 let innermost ~path off p hover =
