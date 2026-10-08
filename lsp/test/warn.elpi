@@ -1,0 +1,2 @@
+pred p i:int.
+p X :- Y = 1.

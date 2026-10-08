@@ -183,8 +183,8 @@ decl:
       let cwd = Filename.dirname (loc $sloc).source_name in
       (* a file that does not exist (yet) is an error of this declaration *)
       try C.parse_file ~cwd (x ^ ext)
-      with Failure _ as e when !Term.deferring ->
-        ignore (Term.defer (loc $sloc) e); { file_name = x; digest = Digest.string x; deps = []; ast = [] }) l))
+      with Failure m when !Term.deferring ->
+        ignore (Term.defer (loc $sloc) (ParseError(loc $sloc, m))); { file_name = x; digest = Digest.string x; deps = []; ast = [] }) l))
   }
 | LOCAL; l = separated_nonempty_list(CONJ,constant); option(type_term); FULLSTOP {
     ignore (Term.defer (loc $loc) (ParseError(loc $loc,"local keyword is no longer supported"))); Program.Ignored (loc $loc) }

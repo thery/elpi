@@ -64,14 +64,25 @@ let message_of_state s =
 
 let one_line s = String.concat " " (List.filter (( <> ) "") (String.split_on_char '\n' s))
 
+(* the span of the accumulate directive of [file] in [text], or the
+   beginning of the text: a heuristic, the directive is looked for in text *)
+let accumulate_span text file =
+  let name = Filename.remove_extension (Filename.basename file) in
+  let re = Str.regexp ("^[ \t]*accumulate[^.]*\\b" ^ Str.quote name ^ "\\b[^.]*\\.") in
+  match Str.search_forward re text 0 with
+  | start -> start, Str.match_end ()
+  | exception Not_found -> 0, 0
+
 (* a diagnostic from an Elpi location; an error located in another file
-   (an accumulated one) is shown at the beginning of the document *)
-let diag_of_loc ~path severity loc message =
+   (an accumulated one) is shown on its accumulate directive *)
+let diag_of_loc ~path ~text severity loc message =
+  let message = String.trim message in
   match loc with
-  | Some { Ast.Loc.source_name; source_start; source_stop; line; _ } when source_name = path ->
+  | Some { Ast.Loc.source_name; source_start; source_stop; _ } when source_name = path ->
       { start = source_start; stop = source_stop; severity; message }
   | Some { Ast.Loc.source_name; line; source_start; line_starts_at; _ } ->
-      { start = 0; stop = 0; severity;
+      let start, stop = accumulate_span text source_name in
+      { start; stop; severity;
         message = Printf.sprintf "In %s, line %d, column %d: %s" source_name line
             (source_start - line_starts_at + 1) message }
   | None -> { start = 0; stop = 0; severity; message }
@@ -113,25 +124,29 @@ let compile ~path text =
   hover
 
 let check ~path text =
-  let error loc msg = { diagnostics = [ diag_of_loc ~path Error loc msg ]; hover = None } in
-  match resilient_parse ~path text with
-  | _ :: _ as diagnostics -> { diagnostics; hover = None }
-  | exception e -> error None ("parser: " ^ Printexc.to_string e)
-  | [] ->
-      warnings := [];
-      let result =
-        match compile ~path text with
-        | hover -> { diagnostics = []; hover = Some hover }
-        | exception Parse.ParseError (loc, msg) -> error (Some loc) msg
-        | exception Compile.CompileError (loc, msg) -> error loc msg
-        | exception Elpi_error (loc, msg) -> error loc msg
-        | exception (Failure msg) -> error None msg
-        | exception e ->
-            log "internal error: %s\n%s" (Printexc.to_string e) (Printexc.get_backtrace ());
-            error None ("internal error: " ^ Printexc.to_string e) in
-      let ws = List.rev_map (fun (loc, msg) -> diag_of_loc ~path Warning loc msg) !warnings in
-      warnings := [];
-      { result with diagnostics = result.diagnostics @ ws }
+  let error loc msg = { diagnostics = [ diag_of_loc ~path ~text Error loc msg ]; hover = None } in
+  let syntax =
+    (* the resilient parser may still raise: the normal path then reports
+       the first error *)
+    try resilient_parse ~path text
+    with e -> log "resilient parser: %s" (Printexc.to_string e); [] in
+  if syntax <> [] then { diagnostics = syntax; hover = None }
+  else begin
+    warnings := [];
+    let result =
+      match compile ~path text with
+      | hover -> { diagnostics = []; hover = Some hover }
+      | exception Parse.ParseError (loc, msg) -> error (Some loc) msg
+      | exception Compile.CompileError (loc, msg) -> error loc msg
+      | exception Elpi_error (loc, msg) -> error loc msg
+      | exception (Failure msg) -> error None msg
+      | exception e ->
+          log "internal error: %s\n%s" (Printexc.to_string e) (Printexc.get_backtrace ());
+          error None ("internal error: " ^ Printexc.to_string e) in
+    let ws = List.rev_map (fun (loc, msg) -> diag_of_loc ~path ~text Warning loc msg) !warnings in
+    warnings := [];
+    { result with diagnostics = result.diagnostics @ ws }
+  end
 
 (* --- queries on the hover information ---------------------------------------- *)
 

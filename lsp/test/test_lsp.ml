@@ -50,16 +50,21 @@ let notify meth params =
                 @ if params = `Null then [] else [ "params", params ]))
 
 let uri file = "file://" ^ Filename.concat dir file
-let anonymize s =
-  let d = "file://" ^ dir in
+(* replaces [d] by [by] in [s] *)
+let replace d by s =
   let b = Buffer.create 80 in
   let n = String.length d in
   let i = ref 0 in
   while !i < String.length s do
-    if !i + n <= String.length s && String.sub s !i n = d then (Buffer.add_string b "file://$DIR"; i := !i + n)
+    if n > 0 && !i + n <= String.length s && String.sub s !i n = d then (Buffer.add_string b by; i := !i + n)
     else (Buffer.add_char b s.[!i]; incr i)
   done;
   Buffer.contents b
+
+(* the directory of the test, also as Elpi names it, without _build/default *)
+let anonymize s =
+  let clean = Str.global_replace (Str.regexp "/_build/[^/]+") "" dir in
+  s |> replace dir "$DIR" |> replace clean "$DIR"
 
 let read_file file =
   let ic = open_in_bin (Filename.concat dir file) in
@@ -80,7 +85,7 @@ let rec wait_diagnostics file =
     Printf.printf "diagnostics of %s: %d\n" file (List.length ds);
     List.iter (fun d ->
         Printf.printf "  %s %s: %s\n" (pp_range (member "range" d))
-          (severity (member "severity" d |> to_int)) (member "message" d |> to_string))
+          (severity (member "severity" d |> to_int)) (anonymize (member "message" d |> to_string)))
       ds
   end else wait_diagnostics file
 
@@ -135,6 +140,9 @@ let () =
   notify "initialized" (`Assoc []);
   open_file "syntax.elpi";
   open_file "typeerr.elpi";
+  open_file "warn.elpi";
+  open_file "accbad.elpi";
+  open_file "accmissing.elpi";
   open_file "good.elpi";
   hover "good.elpi" "double 3" 0;
   hover "good.elpi" "double 3 Y" 9;

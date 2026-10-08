@@ -1,10 +1,10 @@
 (executable
  (name test_lsp)
  (modules test_lsp)
- (libraries yojson unix))
+ (libraries yojson unix str))
 
 (rule
- (deps syntax.elpi typeerr.elpi good.elpi lib.elpi)
+ (deps (glob_files *.elpi))
  (action
   (with-stdout-to test_lsp.output
    (run %{exe:test_lsp.exe} %{exe:../elpi_lsp.exe} .))))

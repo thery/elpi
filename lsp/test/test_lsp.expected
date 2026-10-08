@@ -7,6 +7,13 @@ diagnostics of syntax.elpi: 5
   2:16-2:16 info: missing term
 diagnostics of typeerr.elpi: 1
   1:11-1:18 error: Typechecker: literal "hello" has type string but = expects an argument of type int
+diagnostics of warn.elpi: 2
+  1:2-1:3 warning: X is linear: name it _X (discard) or X_ (fresh variable)
+  1:7-1:8 warning: Y is linear: name it _Y (discard) or Y_ (fresh variable)
+diagnostics of accbad.elpi: 1
+  0:0-0:18 error: In $DIR/badlib.elpi, line 1, column 9: Term expected, got keyword.
+diagnostics of accmissing.elpi: 1
+  1:0-1:10 error: File nothere.elpi not found in: 
 diagnostics of good.elpi: 0
 hover "double 3"+0: 4:8-4:14 "```elpi\n(pred int -> int)\n```"
 hover "double 3 Y"+9: 4:17-4:18 "```elpi\nint\n```"
@@ -16,7 +23,7 @@ hover "std.map"+4: 4:31-4:38 "```elpi\n(func list int, ((func int -> int)) -> li
 hover "\"\206\187\" L"+5: 4:70-4:71 "```elpi\nlist int\n```"
 hover "% a comment"+3: none
 definition "double 3"+2: file://$DIR/good.elpi 1:0-1:24
-definition "twice Y Z"+1: file:///home/thery/claudeExp/mastic-work/elpi/lsp/test/./lib.elpi 0:0-0:23
+definition "twice Y Z"+1: file://$DIR/lib.elpi 0:0-0:23
 definition "double 3 Y"+9: none
 definition "std.map"+4: none
 diagnostics of good.elpi: 2
