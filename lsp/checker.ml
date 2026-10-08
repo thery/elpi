@@ -99,15 +99,52 @@ let resilient_parse ~path text =
   let lexbuf = Lexing.from_string text in
   Parse.program_resilient ~elpi ~loc:(Ast.Loc.initial path) ~digest:(Digest.string text) lexbuf
 
+let profile = Sys.getenv_opt "ELPI_LSP_PROFILE" <> None
+let timed what f =
+  if not profile then f () else begin
+    let t = Unix.gettimeofday () in
+    let r = f () in
+    log "  %s: %.3fs" what (Unix.gettimeofday () -. t); r
+  end
+
+(* A cache of compiled units. A program is a list of units (the accumulated
+   files, then the document), each compiled on top of the previous ones. A
+   unit is identified by its digest and those of the units before it: if none
+   changed, its compilation (the program extended with it, its hover
+   information and its warnings) is reused. So an accumulated file is
+   compiled once, not at each check. *)
+type cached_unit = {
+  extended : Compile.program;
+  unit_hover : Compile.info Compile.IntervalTree.t;
+  unit_warnings : (Ast.Loc.t option * string) list;
+}
+
+let unit_cache : (Digest.t, cached_unit) Hashtbl.t = Hashtbl.create 17
+
+let compile_unit ~elpi ~key ~base sp =
+  match Hashtbl.find_opt unit_cache key with
+  | Some c -> warnings := c.unit_warnings @ !warnings; c
+  | None ->
+      let before = !warnings in
+      let name = Filename.basename (Compile.scoped_program_name sp) in
+      let u = timed ("unit " ^ name) (fun () -> Compile.unit ~elpi ~base sp) in
+      let extended = timed "extend" (fun () -> Compile.extend ~base u) in
+      let rec added w = if w == before then [] else match w with [] -> [] | x :: w -> x :: added w in
+      let c = { extended; unit_hover = Compile.hover u; unit_warnings = added !warnings } in
+      if Hashtbl.length unit_cache > 1000 then Hashtbl.reset unit_cache;
+      Hashtbl.replace unit_cache key c;
+      c
+
 let compile_program ast =
   let elpi = Lazy.force elpi in
   let base = Compile.empty_base ~elpi in
-  let sps = Compile.scope_ast ~elpi ast in
-  let _, terms =
-    List.fold_left (fun (base, hover) sp ->
-        let u = Compile.unit ~elpi ~base sp in
-        Compile.extend ~base u, Compile.hover u :: hover)
-      (base, []) sps in
+  let sps = timed "scope" (fun () -> Compile.scope_ast ~elpi ast) in
+  let _, _, terms =
+    List.fold_left (fun (key, base, hover) sp ->
+        let key = Digest.string (key ^ Compile.scoped_program_digest sp) in
+        let c = compile_unit ~elpi ~key ~base sp in
+        key, c.extended, c.unit_hover :: hover)
+      ("", base, []) sps in
   { terms;
     types = Compile.IntervalTree.of_list
         (List.concat_map (fun sp -> List.map (fun (l, t, d) -> l, (t, d)) (Compile.hover_types sp)) sps) }
@@ -124,16 +161,19 @@ let error_of_exn = function
 
 (* The compiler stops at the first error. To go on, the declaration where the
    error is is removed and the program compiled again (at most [max_errors]
-   times), so that all the errors are reported, and the hover information is
-   available for the rest. An error in a declaration that contains a syntax
-   error (a position of [syntax]) is a consequence of the error recovery: it
-   is not reported. Warnings are those of the last compilation. *)
+   times, and not after [time_budget] seconds), so that all the errors are
+   reported, and the hover information is available for the rest. An error
+   in a declaration that contains a syntax error (a position of [syntax]) is
+   a consequence of the error recovery: it is not reported. Warnings are those
+   of the last compilation. *)
 let max_errors = 50
+let time_budget = 3.0
 
 let compile_resilient ~path ~text ~syntax ast =
   let caused_by_syntax spans =
     List.exists (fun (sp : Ast.Loc.t) ->
         List.exists (fun p -> sp.source_start <= p && p <= sp.source_stop) syntax) spans in
+  let deadline = Unix.gettimeofday () +. time_budget in
   let rec go ast diags n =
     warnings := [];
     match compile_program ast with
@@ -142,6 +182,11 @@ let compile_resilient ~path ~text ~syntax ast =
         let loc, msg = error_of_exn e in
         let diag = diag_of_loc ~path ~text Error loc msg in
         match loc with
+        | Some l when n > 0 && l.Ast.Loc.source_name = path && Unix.gettimeofday () > deadline ->
+            let stop = { start = 0; stop = 0; severity = Information;
+                         message = Printf.sprintf "checking stopped after %d errors (more than %.0fs): \
+                                                   there may be more" (List.length diags + 1) time_budget } in
+            List.rev (stop :: diag :: diags), None
         | Some l when n > 0 && l.Ast.Loc.source_name = path -> begin
             match Ast.remove_declarations_at ast l with
             | Some (ast, spans) -> go ast (if caused_by_syntax spans then diags else diag :: diags) (n - 1)
@@ -157,12 +202,14 @@ let check ~path text =
     match resilient_parse ~path text with
     | errors, ast -> syntax_diagnostics text errors, Some ast
     | exception e -> log "resilient parser: %s" (Printexc.to_string e); [], None in
-  (* without syntax error, the text is parsed as Elpi does; with syntax
-     errors, the program where they are erased is used *)
+  (* the program of the resilient parser: without syntax error it is the
+     program of the normal parser (as Elpi parses it), with syntax errors the
+     program where they are erased; the normal parser is used only if the
+     resilient one raised *)
   let program =
-    match syntax, erased with
-    | _ :: _, Some ast -> Ok ast
-    | _ ->
+    match erased with
+    | Some ast -> Ok ast
+    | None ->
         let elpi = Lazy.force elpi in
         match Parse.program_from ~elpi ~loc:(Ast.Loc.initial path) ~digest:(Digest.string text)
                 (Lexing.from_string text) with

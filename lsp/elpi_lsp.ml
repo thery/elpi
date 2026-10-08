@@ -142,8 +142,9 @@ let semantic_tokens ({ textDocument = { uri }; _ } : SemanticTokensParams.t) =
   | Some doc ->
       if doc.checked <> doc.version then check uri doc;
       let text = doc.text.Text.text in
-      let tokens = Highlight.tokens ~path:doc.path ~hover:doc.hover text in
-      Some (SemanticTokens.create ~data:(Highlight.encode text tokens) ())
+      let tokens = Checker.timed "colors: tokens" (fun () -> Highlight.tokens ~path:doc.path ~hover:doc.hover text) in
+      let data = Checker.timed "colors: encode" (fun () -> Highlight.encode text tokens) in
+      Some (SemanticTokens.create ~data ())
 
 let shutdown_received = ref false
 

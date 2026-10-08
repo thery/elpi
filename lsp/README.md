@@ -144,6 +144,24 @@ depend on `sel` and `lsp`. In the workspace above:
 Any LSP client can be used: the server takes no argument (it ignores
 `--stdio`) and speaks on stdin/stdout.
 
+## Performance
+
+- **Compiled units are cached**: a program is a list of units (the accumulated
+  files, then the document), each compiled on top of the previous ones; a unit
+  is identified by its digest and those of the units before it, and an
+  unchanged accumulated file is not compiled again. Editing a file that
+  accumulates a 48,000-line file is checked in 0.1 to 2 seconds instead of 20.
+  The first check of such a file still compiles everything.
+- The text is **parsed once**: the program of the resilient parser is compiled
+  (without syntax error it is the program of the normal parser).
+- The error recovery of the compiler (removing a declaration and compiling
+  again) stops after **3 seconds**, with a message saying that there may be
+  more errors.
+- The **colors are linear** in the size of the text: on a 13.7 MB file (1.65
+  million tokens) they take about 5 seconds.
+- `ELPI_LSP_PROFILE=1` in the environment of the server logs the time of each
+  phase (scoping, each unit, colors).
+
 ## Limits
 
 - After an error, the whole declaration where it is is removed before compiling

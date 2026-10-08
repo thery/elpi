@@ -132,7 +132,7 @@ let comments text b e =
 
 (* the colored tokens of [text], as (start, stop, kind), in order *)
 let tokens ~path ~hover text =
-  let toks = lex text in
+  let toks = Checker.timed "colors: lex" (fun () -> lex text) in
   let rec go prev last acc = function
     | [] -> List.rev_append acc (comments text last (String.length text))
     | (b, e, t) :: rest ->
@@ -143,27 +143,50 @@ let tokens ~path ~hover text =
           | `Kind k -> (b, e, k) :: acc
           | `Name s -> (b, e, classify_name ~path ~hover ~prev b e s) :: acc in
         go (Some t) (max last e) acc rest in
-  go None 0 [] toks |> List.sort compare
+  (* the tokens and the comments of the gaps are produced in order *)
+  go None 0 [] toks
 
 (* the LSP encoding: for each token, 5 integers (line and start relative to
    the previous token, length, kind, modifiers), in UTF-16 units; a token
-   spanning several lines is cut at the ends of lines *)
+   spanning several lines is cut at the ends of lines. The text is walked
+   once, from token to token (positions are not computed from the beginning
+   of their line, which is quadratic on long lines). *)
 let encode text tokens =
-  let t = Text.make text in
   let pieces = List.concat_map (fun (b, e, k) ->
+      (* the next newline in [b, e): only the token is scanned *)
+      let rec newline i = if i >= e then None else if text.[i] = '\n' then Some i else newline (i + 1) in
       let rec cut b acc =
         if b >= e then List.rev acc
         else
-          match String.index_from_opt text b '\n' with
-          | Some n when n < e -> cut (n + 1) (if n > b then (b, n, k) :: acc else acc)
-          | _ -> List.rev ((b, e, k) :: acc) in
+          match newline b with
+          | Some n -> cut (n + 1) (if n > b then (b, n, k) :: acc else acc)
+          | None -> List.rev ((b, e, k) :: acc) in
       cut b []) tokens in
-  let data = ref [] and pline = ref 0 and pchar = ref 0 in
+  let n = String.length text in
+  (* the current position: byte offset, line, UTF-16 column *)
+  let off = ref 0 and line = ref 0 and col = ref 0 in
+  let advance target =
+    let target = min target n in
+    while !off < target do
+      let c = text.[!off] in
+      if c = '\n' then (incr line; col := 0) else col := !col + Text.utf16_units c;
+      incr off
+    done in
+  (* the integers are written directly in an array (millions of them on a
+     large file) *)
+  let data = Array.make (5 * List.length pieces) 0 and i = ref 0 in
+  let pline = ref 0 and pchar = ref 0 in
   List.iter (fun (b, e, k) ->
-      let ({ line; character } : Lsp.Types.Position.t) = Text.position_of_offset t b in
-      let ({ character = ce; _ } : Lsp.Types.Position.t) = Text.position_of_offset t e in
-      let dline = line - !pline in
-      let dchar = if dline = 0 then character - !pchar else character in
-      data := 0 :: code k :: (ce - character) :: dchar :: dline :: !data;
-      pline := line; pchar := character) pieces;
-  Array.of_list (List.rev !data)
+      if b >= !off then begin
+        advance b;
+        let l = !line and c = !col in
+        advance e;
+        let dline = l - !pline in
+        data.(!i) <- dline;
+        data.(!i + 1) <- (if dline = 0 then c - !pchar else c);
+        data.(!i + 2) <- !col - c;
+        data.(!i + 3) <- code k;
+        i := !i + 5;
+        pline := l; pchar := c
+      end) pieces;
+  Array.sub data 0 !i
