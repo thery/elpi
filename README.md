@@ -2,6 +2,10 @@
 [![Users workflow](https://github.com/LPCIC/elpi/actions/workflows/users.yml/badge.svg)](https://github.com/LPCIC/elpi/actions/workflows/users.yml)
 # ELPI - Embeddable λProlog Interpreter
 
+> **This branch (`lsp`)**: an experimental language server for Elpi, with an
+> error-resilient parser and a VS Code extension. See [lsp/README.md](lsp/README.md).
+
+
 ELPI implements a variant of λProlog enriched with Constraint Handling Rules,
 a programming language well suited to manipulate syntax trees with binders.
 
