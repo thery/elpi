@@ -2,7 +2,7 @@
 
 `elpi-lsp` speaks the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 on stdin/stdout. It is meant to try the error-resilient parser of Elpi (built
-with [Mastic](https://github.com/LPCIC/mastic)), which reports all the syntax
+with [Mastic](https://github.com/gares/mastic)), which reports all the syntax
 errors of a file at once.
 
 ## What it does
@@ -52,27 +52,58 @@ Capabilities: `textDocumentSync` (open/close, Full), `hoverProvider`,
 `textDocument/definition`; notifications: `initialized`, `exit`,
 `textDocument/didOpen`, `didChange`, `didClose`.
 
+## Quick start
+
+Everything is on the branch `lsp` of https://github.com/thery/elpi. Mastic is
+not on opam yet: it is built together with Elpi, in one dune workspace.
+
+1. Get the sources, side by side:
+
+       mkdir elpi-lsp && cd elpi-lsp
+       git clone https://github.com/gares/mastic.git
+       git clone -b lsp https://github.com/thery/elpi.git
+       echo '(lang dune 3.0)' > dune-workspace
+       echo '(dirs mastic elpi)' > dune
+
+2. Install the OCaml dependencies (OCaml >= 4.14, an opam switch): those of
+   Elpi and Mastic, plus `sel` and `lsp` (from ocaml-lsp) for the server:
+
+       opam install dune menhir menhirLib ppx_deriving ppxlib ppx_optcomp re \
+         stdlib-shims atdgen atdts sel lsp jsonrpc yojson
+
+3. Build the server:
+
+       dune build ./elpi/lsp/elpi_lsp.exe @elpi/install
+
+   The server is `_build/install/default/bin/elpi-lsp` (a link to
+   `_build/default/elpi/lsp/elpi_lsp.exe`). Test it with
+   `dune build @elpi/lsp/runtest`.
+
+4. Install the VS Code extension, which is in the repository:
+
+       code --install-extension elpi/editors/vscode-lsp/elpi-lsp-0.0.1.vsix
+
+5. In the settings of VS Code, set `elpi-lsp.path` to the absolute path of
+   `_build/install/default/bin/elpi-lsp` (not needed if `elpi-lsp` is in the
+   `PATH`).
+
+6. Open a `.elpi` file: syntax errors are underlined (all of them at once),
+   then type errors; on a file that compiles, hovering shows types and F12
+   (Go to Definition) jumps to the declaration of a predicate.
+
+The extension can be installed together with the syntax highlighting extension
+of Elpi (`gares.elpi-lang`): both use the language id `elpi`. More about the
+extension, its settings and its test client in
+[`editors/vscode-lsp/README.md`](../editors/vscode-lsp/README.md).
+
 ## Build
 
-It needs the OCaml libraries `sel` and `lsp` (from ocaml-lsp, with `jsonrpc`) in
-addition to those of Elpi. In a dune workspace holding `mastic/` and `elpi/`:
+The server is a separate opam package, `elpi-lsp.opam`, so that `elpi` does not
+depend on `sel` and `lsp`. In the workspace above:
 
-    dune build ./elpi/lsp/elpi_lsp.exe
+    dune build ./elpi/lsp/elpi_lsp.exe         # the server
+    dune build @elpi/lsp/runtest               # its test: JSON-RPC messages, compared with test/test_lsp.expected
 
-The executable is `_build/default/elpi/lsp/elpi_lsp.exe`; `dune build @install`
-(or `dune install elpi-lsp`) also provides it as `elpi-lsp`
-(`_build/install/default/bin/elpi-lsp`). It is a separate opam package,
-`elpi-lsp.opam`, so that `elpi` does not depend on `sel` and `lsp`.
-
-Test (drives the server with JSON-RPC messages, compares with `test/test_lsp.expected`):
-
-    dune build @elpi/lsp/runtest
-
-## VS Code
-
-The VS Code client is in `editors/vscode-lsp` (branch `lsp-vscode`). Its setting
-`elpi-lsp.path` must point to the server, e.g. the absolute path of
-`_build/install/default/bin/elpi-lsp`, unless `elpi-lsp` is in the `PATH`.
 Any LSP client can be used: the server takes no argument (it ignores
 `--stdio`) and speaks on stdin/stdout.
 
