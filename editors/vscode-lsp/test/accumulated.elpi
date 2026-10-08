@@ -1,0 +1,6 @@
+% Accumulates good.elpi and uses its predicates.
+
+accumulate good.
+
+pred quadruple i:nat, o:nat.
+quadruple N M :- double N K, double K M.  % line 6: `double` defined in good.elpi

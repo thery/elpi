@@ -1,0 +1,17 @@
+% A program with several syntax errors (all should be reported at once).
+
+kind nat type.
+type z nat.
+type s nat -> nat.
+
+pred p i:nat.
+p (s X :- p X.                 % line 8: missing ')'
+
+pred q i:nat.
+q X :- p X, , p X.             % line 11: empty conjunct
+
+pred r i:nat.
+r X :- p X                     % line 14: missing '.' before `pred`
+
+pred t o:nat.
+t (s z)).                      % line 17: extra ')'

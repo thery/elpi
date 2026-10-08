@@ -1,0 +1,16 @@
+% A well-typed program, used for hover and go-to-definition tests.
+% (line numbers in comments are 1-based)
+
+kind nat type.
+type z nat.
+type s nat -> nat.
+
+pred add i:nat, i:nat, o:nat.
+add z N N.
+add (s N) M (s K) :- add N M K.
+
+pred double i:nat, o:nat.
+double N M :- add N N M.            % line 13: `add` used, defined line 8-10
+
+pred main.
+main :- double (s (s z)) X, print X. % line 16: `double` used, defined line 12-13

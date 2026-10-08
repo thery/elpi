@@ -1,0 +1,12 @@
+% A program with a type error: `double` expects a nat, gets a string.
+
+kind nat type.
+type z nat.
+type s nat -> nat.
+
+pred double i:nat, o:nat.
+double z z.
+double (s N) (s (s M)) :- double N M.
+
+pred main.
+main :- double "two" X, print X.     % line 12: type error on "two"
