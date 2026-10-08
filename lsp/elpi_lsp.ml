@@ -84,8 +84,11 @@ let initialize _params =
   let textDocumentSync =
     `TextDocumentSyncOptions (TextDocumentSyncOptions.create ~openClose:true
                                 ~change:TextDocumentSyncKind.Full ()) in
+  let semanticTokensProvider =
+    `SemanticTokensOptions (SemanticTokensOptions.create ~full:(`Bool true)
+      ~legend:(SemanticTokensLegend.create ~tokenTypes:Highlight.legend ~tokenModifiers:[]) ()) in
   let capabilities = ServerCapabilities.create ~textDocumentSync
-      ~hoverProvider:(`Bool true) ~definitionProvider:(`Bool true) () in
+      ~hoverProvider:(`Bool true) ~definitionProvider:(`Bool true) ~semanticTokensProvider () in
   InitializeResult.create ~capabilities
     ~serverInfo:(InitializeResult.create_serverInfo ~name:"elpi-lsp" ~version:"0.1" ()) ()
 
@@ -131,6 +134,17 @@ let definition ({ textDocument = { uri }; position; _ } : DefinitionParams.t) : 
               let uri = if file = doc.path then uri else DocumentUri.of_path file in
               Some (`Location [ Location.create ~uri ~range:(Text.range t source_start source_stop) ])
 
+(* the colors of a document: semantic tokens, from the lexer and the hover
+   information (see highlight.ml) *)
+let semantic_tokens ({ textDocument = { uri }; _ } : SemanticTokensParams.t) =
+  match Hashtbl.find_opt documents uri with
+  | None -> None
+  | Some doc ->
+      if doc.checked <> doc.version then check uri doc;
+      let text = doc.text.Text.text in
+      let tokens = Highlight.tokens ~path:doc.path ~hover:doc.hover text in
+      Some (SemanticTokens.create ~data:(Highlight.encode text tokens) ())
+
 let shutdown_received = ref false
 
 let handle_request : type a. a Lsp.Client_request.t -> (a, string) result = function
@@ -138,6 +152,7 @@ let handle_request : type a. a Lsp.Client_request.t -> (a, string) result = func
   | Initialize params -> Ok (initialize params)
   | Shutdown -> shutdown_received := true; Ok ()
   | TextDocumentHover params -> Ok (hover params)
+  | SemanticTokensFull params -> Ok (semantic_tokens params)
   | TextDocumentDefinition params -> Ok (definition params)
   | _ -> Error "unsupported request"
 

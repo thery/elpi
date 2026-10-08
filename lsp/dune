@@ -2,5 +2,5 @@
  (name elpi_lsp)
  (public_name elpi-lsp)
  (package elpi-lsp)
- (modules text checker elpi_lsp)
- (libraries elpi elpi.parser mastic sel lsp jsonrpc yojson unix str))
+ (modules text checker highlight elpi_lsp)
+ (libraries elpi elpi.parser elpi.lexer_config mastic sel lsp jsonrpc yojson unix str))

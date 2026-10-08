@@ -2,7 +2,7 @@
   "name": "elpi-lsp",
   "displayName": "Elpi LSP (experimental)",
   "description": "Language server client for Elpi: diagnostics, hover (types) and go to definition",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "lpcic",
   "license": "LGPL-2.1",
   "repository": {
@@ -10,8 +10,15 @@
     "url": "https://github.com/LPCIC/elpi"
   },
   "homepage": "https://github.com/LPCIC/elpi",
-  "keywords": ["elpi", "lambda Prolog", "lsp"],
-  "categories": ["Programming Languages", "Linters"],
+  "keywords": [
+    "elpi",
+    "lambda Prolog",
+    "lsp"
+  ],
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
   "engines": {
     "vscode": "^1.82.0"
   },
@@ -24,8 +31,13 @@
     "languages": [
       {
         "id": "elpi",
-        "aliases": ["Elpi", "elpi"],
-        "extensions": [".elpi"],
+        "aliases": [
+          "Elpi",
+          "elpi"
+        ],
+        "extensions": [
+          ".elpi"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -51,19 +63,65 @@
         },
         "elpi-lsp.args": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "markdownDescription": "Extra command line arguments passed to the server."
         },
         "elpi-lsp.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "scope": "window",
           "markdownDescription": "Trace the LSP messages exchanged with the server (shown in the *Elpi LSP Trace* output channel)."
         }
       }
-    }
+    },
+    "semanticTokenScopes": [
+      {
+        "language": "elpi",
+        "scopes": {
+          "keyword": [
+            "keyword.control.elpi"
+          ],
+          "operator": [
+            "keyword.control.elpi"
+          ],
+          "function": [
+            "entity.name.function"
+          ],
+          "type": [
+            "entity.name.type"
+          ],
+          "variable": [
+            "variable.language.elpi"
+          ],
+          "typeParameter": [
+            "variable.language.elpi"
+          ],
+          "parameter": [
+            "binder.elpi"
+          ],
+          "string": [
+            "string.quoted.double.elpi"
+          ],
+          "number": [
+            "constant.numeric.elpi"
+          ],
+          "comment": [
+            "comment.line.percentage.elpi"
+          ],
+          "enumMember": [
+            "source.elpi"
+          ]
+        }
+      }
+    ]
   },
   "scripts": {
     "check": "node test/check_extension.js",

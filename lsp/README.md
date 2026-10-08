@@ -39,6 +39,19 @@ For each open `.elpi` document (full text synchronization), the server checks th
      (possibly in an accumulated file). There is no answer for the predicates of
      the standard library (they are not in a file) nor for variables.
 
+**Colors** (semantic tokens, `textDocument/semanticTokens/full`): the text
+is lexed by Elpi's lexer (in recovering mode, so also on broken text), and
+each name is classified by what the compiler knows (`Compile.hover`,
+`Compile.hover_types`): a predicate (`function`), a variable, a parameter
+bound by `\`, a type, a type variable (`typeParameter`), a constant
+(`enumMember`); keywords, operators, strings, numbers and comments by their
+token. Without that information (e.g. in a declaration with a syntax error),
+the context is used (the name after `pred` is a predicate, …). The VS Code
+extension maps these kinds to the scopes of the TextMate grammar of
+`gares.elpi-lang` (`semanticTokenScopes`), so that the colors look as before,
+but the tokens are recognized by the parser instead of regular expressions.
+See `lsp/highlight.ml`.
+
 Changes are debounced: messages from the client are handled before checks,
 so after a burst of changes only the last version of a document is checked.
 A hover or definition request on a document not checked yet checks it first.
@@ -95,7 +108,7 @@ not on opam yet: it is built together with Elpi, in one dune workspace.
 
 4. Install the VS Code extension, which is in the repository:
 
-       code --install-extension elpi/editors/vscode-lsp/elpi-lsp-0.0.1.vsix
+       code --install-extension elpi/editors/vscode-lsp/elpi-lsp-0.0.2.vsix
 
 5. In the settings of VS Code, set `elpi-lsp.path` to the absolute path of
    `_build/install/default/bin/elpi-lsp` (not needed if `elpi-lsp` is in the

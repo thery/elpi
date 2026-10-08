@@ -52,14 +52,14 @@ on stderr.
 ```sh
 cd editors/vscode-lsp
 npm install                    # vscode-languageclient + @vscode/vsce, locally
-npx @vscode/vsce package       # produces elpi-lsp-0.0.1.vsix
+npx @vscode/vsce package       # produces elpi-lsp-0.0.2.vsix
 node test/check_extension.js   # optional smoke test outside VS Code
 ```
 
 ## 3. Install it
 
 ```sh
-code --install-extension editors/vscode-lsp/elpi-lsp-0.0.1.vsix
+code --install-extension editors/vscode-lsp/elpi-lsp-0.0.2.vsix
 ```
 
 Then tell it where the server is (unless `elpi-lsp` is in your `PATH`):
