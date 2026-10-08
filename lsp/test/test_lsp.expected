@@ -1,4 +1,4 @@
-capabilities: {"definitionProvider":true,"hoverProvider":true,"semanticTokensProvider":{"full":true,"legend":{"tokenModifiers":[],"tokenTypes":["keyword","function","variable","parameter","type","typeParameter","string","number","comment","operator","enumMember"]}},"textDocumentSync":{"change":1,"openClose":true}}
+capabilities: {"definitionProvider":true,"hoverProvider":true,"semanticTokensProvider":{"full":true,"legend":{"tokenModifiers":[],"tokenTypes":["keyword","function","variable","parameter","type","typeParameter","string","number","comment","operator","enumMember"]}},"textDocumentSync":{"change":1,"openClose":true,"save":true}}
 diagnostics of syntax.elpi: 6
   1:14-1:15 error: Term expected, got keyword.
   2:16-2:17 error: This infix operator expects a right hand side.

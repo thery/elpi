@@ -61,6 +61,11 @@ Code (its default, `configuredByTheme`, leaves it to the color theme, and many
 themes leave it off); switching it between `true` and `false` shows the two
 colorings.
 
+Accumulated files are read from the disk: when a file is saved, the other
+open documents are checked again (they may accumulate it), so that their
+diagnostics follow; the compiled units that did not change come from the
+cache.
+
 Changes are debounced: messages from the client are handled before checks,
 so after a burst of changes only the last version of a document is checked.
 A hover or definition request on a document not checked yet checks it first.

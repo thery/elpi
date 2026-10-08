@@ -51,7 +51,7 @@ let read_message : event Sel.Event.t =
          with e -> log "cannot decode message: %s" (Printexc.to_string e); Read None)
     | Error e -> log "cannot read stdin (%s), exiting" (Printexc.to_string e); exit 1)
 
-let check_later uri version = Sel.now ~priority:10 ~name:"check" (Check (uri, version))
+let check_later ?(priority = 10) uri version = Sel.now ~priority ~name:"check" (Check (uri, version))
 
 let severity : Checker.severity -> DiagnosticSeverity.t = function
   | Error -> Error
@@ -82,7 +82,7 @@ let hover_of uri =
 
 let initialize _params =
   let textDocumentSync =
-    `TextDocumentSyncOptions (TextDocumentSyncOptions.create ~openClose:true
+    `TextDocumentSyncOptions (TextDocumentSyncOptions.create ~openClose:true ~save:(`Bool true)
                                 ~change:TextDocumentSyncKind.Full ()) in
   let semanticTokensProvider =
     `SemanticTokensOptions (SemanticTokensOptions.create ~full:(`Bool true)
@@ -179,6 +179,14 @@ let handle_notification : Lsp.Client_notification.t -> event Sel.Event.t list = 
       (match List.rev contentChanges with
        | { text; range = None; _ } :: _ -> set_text uri text
        | _ -> log "ignoring an incremental change"; [])
+  | DidSaveTextDocument { textDocument = { uri }; _ } ->
+      (* the other documents may accumulate the saved file (accumulated files
+         are read from the disk): they are checked again; the compiled units
+         that did not change come from the cache *)
+      Hashtbl.fold (fun u (doc : document) acc ->
+          if DocumentUri.equal u uri then acc
+          else begin doc.checked <- -1; check_later ~priority:20 u doc.version :: acc end)
+        documents []
   | TextDocumentDidClose { textDocument = { uri } } ->
       Hashtbl.remove documents uri;
       send_notification (PublishDiagnostics (PublishDiagnosticsParams.create ~uri ~diagnostics:[] ()));
@@ -216,7 +224,14 @@ let handle_event = function
   | Check (uri, version) ->
       (match Hashtbl.find_opt documents uri with
        | Some doc when doc.version = version && doc.checked <> version ->
-           (try check uri doc with e -> log "check failed: %s" (Printexc.to_string e))
+           (try check uri doc with e ->
+              (* the old diagnostics must not stay: the failure is shown *)
+              log "check failed: %s" (Printexc.to_string e);
+              doc.checked <- doc.version;
+              send_notification (PublishDiagnostics (PublishDiagnosticsParams.create ~uri
+                ~diagnostics:[ Diagnostic.create ~range:(Text.range doc.text 0 0)
+                                 ~severity:DiagnosticSeverity.Error ~source:"elpi"
+                                 ~message:(`String ("internal error of the server: " ^ Printexc.to_string e)) () ] ())))
        | _ -> () (* closed, changed since, or already checked *));
       []
 
