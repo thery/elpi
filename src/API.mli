@@ -359,6 +359,13 @@ module Compile : sig
   val pp_info : Format.formatter -> info -> unit
 
   val hover : compilation_unit -> info IntervalTree.t
+
+  (** [hover] covers the clauses; [hover_types sp] covers the type expressions
+      of the declarations (pred, type, type abbreviations) of [sp]: for each
+      node, its location, a text (the kind of a type constructor, the type
+      itself for compound types), and the location of the declaration of the
+      type constructor when it is in [sp] *)
+  val hover_types : scoped_program -> (Ast.Loc.t * string * Ast.Loc.t option) list
 end
 
 module Data : sig

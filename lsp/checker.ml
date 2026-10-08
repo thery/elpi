@@ -17,7 +17,12 @@ type diagnostic = {
   message : string;
 }
 
-type hover = Compile.info Compile.IntervalTree.t list
+(* the hover information: of the clauses (Compile.hover), and of the type
+   expressions of the declarations (Compile.hover_types) *)
+type hover = {
+  terms : Compile.info Compile.IntervalTree.t list;
+  types : (Ast.Loc.t * string * Ast.Loc.t option) list;
+}
 
 type result = {
   diagnostics : diagnostic list;
@@ -97,12 +102,13 @@ let resilient_parse ~path text =
 let compile_program ast =
   let elpi = Lazy.force elpi in
   let base = Compile.empty_base ~elpi in
-  let _, hover =
+  let sps = Compile.scope_ast ~elpi ast in
+  let _, terms =
     List.fold_left (fun (base, hover) sp ->
         let u = Compile.unit ~elpi ~base sp in
         Compile.extend ~base u, Compile.hover u :: hover)
-      (base, []) (Compile.scope_ast ~elpi ast) in
-  hover
+      (base, []) sps in
+  { terms; types = List.concat_map Compile.hover_types sps }
 
 (* An error of the compiler, as a location and a message *)
 let error_of_exn = function
@@ -171,14 +177,26 @@ let check ~path text =
 
 (* --- queries on the hover information ---------------------------------------- *)
 
-(* the innermost entry at byte [off] of [path] satisfying [p]: the intervals
-   containing [off], or else ending at [off] (the cursor just after a word) *)
-let find ~path off p (hover : hover) =
+(* The entries of the hover information at byte [off] of [path], as
+   (location, text, definition); the innermost one with a text (for hover) or
+   a definition is chosen: among the intervals containing [off], or else
+   ending at [off] (the cursor just after a word). *)
+let entries ~path off (hover : hover) =
   let loc = { (Ast.Loc.initial path) with source_start = off; source_stop = off } in
-  let entries = List.concat_map (Compile.IntervalTree.find loc) hover in
-  let entries = List.filter (fun (_, i) -> p i) entries in
-  let size ({ Ast.Loc.source_start; source_stop; _ }, _) = source_stop - source_start in
-  let inside = List.filter (fun ({ Ast.Loc.source_start; source_stop; _ }, _) ->
+  let terms =
+    List.concat_map (Compile.IntervalTree.find loc) hover.terms
+    |> List.map (fun (l, { Compile.type_; defined }) ->
+        l, Option.map (Format.asprintf "%a" Compile.pp_type_) type_, defined) in
+  let types =
+    List.filter_map (fun ((l : Ast.Loc.t), text, defined) ->
+        if l.source_name = path && l.source_start <= off && off <= l.source_stop
+        then Some (l, Some text, defined) else None) hover.types in
+  terms @ types
+
+let innermost ~path off p hover =
+  let entries = List.filter p (entries ~path off hover) in
+  let size ({ Ast.Loc.source_start; source_stop; _ }, _, _) = source_stop - source_start in
+  let inside = List.filter (fun ({ Ast.Loc.source_start; source_stop; _ }, _, _) ->
       source_start <= off && off < source_stop) entries in
   let candidates = if inside <> [] then inside else entries in
   match List.stable_sort (fun x y -> compare (size x) (size y)) candidates with
@@ -186,11 +204,11 @@ let find ~path off p (hover : hover) =
   | [] -> None
 
 let type_at ~path off hover =
-  match find ~path off (fun i -> i.Compile.type_ <> None) hover with
-  | Some (loc, { Compile.type_ = Some ty; _ }) -> Some (loc, Format.asprintf "%a" Compile.pp_type_ ty)
+  match innermost ~path off (fun (_, t, _) -> t <> None) hover with
+  | Some (loc, Some text, _) -> Some (loc, text)
   | _ -> None
 
 let definition_at ~path off hover =
-  match find ~path off (fun i -> i.Compile.defined <> None) hover with
-  | Some (loc, { Compile.defined = Some d; _ }) -> Some (loc, d)
+  match innermost ~path off (fun (_, _, d) -> d <> None) hover with
+  | Some (loc, _, Some d) -> Some (loc, d)
   | _ -> None

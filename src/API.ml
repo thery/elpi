@@ -255,6 +255,7 @@ module Compile = struct
   type info = Compiler.info = { defined : Ast.Loc.t option; type_ : type_ option }
   let pp_info = Compiler.pp_info
   let hover = Compiler.hover
+  let hover_types = Compiler.hover_types
 end
 
 module Execute = struct

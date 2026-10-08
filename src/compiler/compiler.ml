@@ -2742,6 +2742,79 @@ let hover (u : checked_compilation_unit) =
   (* This signature does not contain all types ... *)
   List.map (info_of_clause ~types:u.checked_code.signature.Assembled.types) clauses |> List.flatten
 
+(* Hover information for the type expressions of the declarations (pred,
+   type, type abbreviations) of a scoped program, which [hover] does not
+   cover: for each node, its location, a text, and the location of the
+   declaration of its type constructor when it is in the program. A type
+   constructor shows its kind, computed from its number of arguments. *)
+let hover_types (sp : scoped_program) =
+  let open ScopedTypeExpression in
+  let kinds = ref F.Map.empty in
+  let rec collect pb =
+    F.Map.iter (fun c (_, loc) -> kinds := F.Map.add c loc !kinds) pb.Scoped.kinds;
+    List.iter (function
+      | Scoped.Namespace (_, pb) | Scoped.Shorten (_, pb) | Scoped.Constraints (_, pb) | Scoped.Block pb -> collect pb
+      | Scoped.Clauses _ -> ()) pb.Scoped.body in
+  collect sp.code.Scoped.pbody;
+  let acc = ref [] in
+  let add loc text defined = acc := (loc, text, defined) :: !acc in
+  let kind n = String.concat " -> " (List.init (n + 1) (fun _ -> "type")) in
+  (* the location of a predicate type may start before its keyword (where
+     the previous token ends, when there are no attributes): it is made to
+     start at the beginning of the line of its first argument *)
+  let clip (loc : Loc.t) (first : e) =
+    if loc.Loc.source_start < first.loc.Loc.line_starts_at && first.loc.Loc.line_starts_at <= first.loc.Loc.source_start
+    then { loc with Loc.source_start = first.loc.Loc.line_starts_at; line = first.loc.Loc.line;
+                    line_starts_at = first.loc.Loc.line_starts_at }
+    else loc in
+  (* a type as written: pred i:A, o:B (or func) for an arrow ending in prop,
+     A -> B otherwise *)
+  let rec show ?(paren = false) (x : e) =
+    let par b t = if b then "(" ^ t ^ ")" else t in
+    match x.it with
+    | Const (_, c) -> F.show c
+    | App (_, c, y, ys) -> par paren (String.concat " " (F.show c :: List.map (show ~paren:true) (y :: ys)))
+    | Prop Ast.Structured.Function -> "func"
+    | Prop Ast.Structured.Relation -> "pred"
+    | Any -> "any"
+    | Arrow _ ->
+        let rec args acc (x : e) =
+          match x.it with
+          | Arrow (m, _, a, b) -> args ((m, a) :: acc) b
+          | Prop f -> Some (f, List.rev acc)
+          | _ -> None in
+        match args [] x with
+        | Some (f, l) ->
+            let kw = match f with Ast.Structured.Function -> "func" | Ast.Structured.Relation -> "pred" in
+            let mode = function Mode.Input -> "i:" | Mode.Output -> "o:" in
+            par paren (kw ^ " " ^ String.concat ", " (List.map (fun (m, a) -> mode m ^ show ~paren:true a) l))
+        | None ->
+            (match x.it with
+             | Arrow (_, _, a, b) -> par paren (show ~paren:true a ^ " -> " ^ show b)
+             | _ -> assert false) in
+  (* an arrow is shown whole, as the type it starts (pred A, B -> C); its
+     final prop is not shown on its own *)
+  let rec e ?(in_arrow = false) (x : e) =
+    match x.it with
+    | Const (Scope.Bound _, c) -> add x.loc (F.show c ^ " : type (a type variable)") None
+    | Const (Scope.Global _, c) -> add x.loc (F.show c ^ " : " ^ kind 0) (F.Map.find_opt c !kinds)
+    | App (_, c, y, ys) ->
+        add x.loc (F.show c ^ " : " ^ kind (1 + List.length ys)) (F.Map.find_opt c !kinds);
+        List.iter e (y :: ys)
+    | Arrow (_, _, a, b) ->
+        if not in_arrow then add (clip x.loc a) (show x) None;
+        e a; e ~in_arrow:true b
+    | Prop _ | Any -> if not in_arrow then add x.loc (show x) None in
+  let rec v = function Lam (_, x) -> v x | Ty x -> e x in
+  let rec decls pb =
+    F.Map.iter (fun _ l -> List.iter (fun (t : ScopedTypeExpression.t) -> v t.value) l) pb.Scoped.types;
+    List.iter (fun (_, (t : ScopedTypeExpression.t)) -> v t.value) pb.Scoped.type_abbrevs;
+    List.iter (function
+      | Scoped.Namespace (_, pb) | Scoped.Shorten (_, pb) | Scoped.Constraints (_, pb) | Scoped.Block pb -> decls pb
+      | Scoped.Clauses _ -> ()) pb.Scoped.body in
+  decls sp.code.Scoped.pbody;
+  !acc
+
 (* ---- map_compilation_unit: apply a CData.t -> CData.t mapping ---- *)
 
 let smart_map_cdata_in_scoped_term (f : CData.t -> CData.t) t =

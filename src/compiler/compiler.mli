@@ -103,3 +103,6 @@ type info = { defined : Ast.Loc.t option; type_ : type_ option }
 val pp_info : Format.formatter -> info -> unit
 
 val hover : checked_compilation_unit -> info IntervalTree.t
+(* hover information for the type expressions of the declarations of a scoped
+   program: location, text, location of the declaration of the type constructor *)
+val hover_types : scoped_program -> (Ast.Loc.t * string * Ast.Loc.t option) list

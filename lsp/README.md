@@ -30,7 +30,11 @@ For each open `.elpi` document (full text synchronization), the server checks th
    is shown on the `accumulate` directive;
 4. the result of `Compile.hover` of the program that finally compiles (all of
    it, but the removed declarations) is kept for:
-   - **hover**: the type of the innermost sub-expression under the cursor;
+   - **hover**: the type of the innermost sub-expression under the cursor; in
+     the declarations (`pred`, `type`, type abbreviations), the kind of a
+     type constructor (`list : type -> type`), type variables, and the whole
+     type of a predicate (`pred i:(list A), o:(list A)`), from
+     `Compile.hover_types`;
    - **go to definition**: the declaration of the symbol under the cursor
      (possibly in an accumulated file). There is no answer for the predicates of
      the standard library (they are not in a file) nor for variables.
