@@ -40,7 +40,7 @@ let default_calc_descriptor = Data.CalcHooks.new_descriptor ()
 
 type builtins = Compiler.declared_builtins
 type elpi = {
-  parser : (module Parse.Parser);
+  parser : (module Parse.Parser_w_Internals);
   resolver : ?cwd:string -> unit:string -> unit -> string;
   header : Compiler.header
 }
@@ -54,10 +54,10 @@ let init ?(versions=Elpi_util.Util.StrMap.empty) ?(flags=Compiler.default_flags)
     | Some x -> x
     | None -> fun ?cwd:_ ~unit:_ () ->
         raise (Failure "'accumulate' is disabled since Setup.init was not given a ~file_resolver.") in
-  let parser = (module Parse.Make(struct let versions = versions let resolver = file_resolver end) : Parse.Parser) in
+  let parser = (module Parse.Make(struct let versions = versions let resolver = file_resolver end) : Parse.Parser_w_Internals) in
   Data.Global_symbols.lock ();
   let header =
-    try Compiler.header_of_ast ~flags ~parser state !quotations !hoas !calc builtins
+    try Compiler.header_of_ast ~flags ~parser:(let module P = (val parser) in (module P : Parse.Parser)) state !quotations !hoas !calc builtins
     with Compiler_data.CompileError(loc,msg) -> Util.anomaly ?loc msg in
   { parser; header; resolver = file_resolver }
 
@@ -83,6 +83,27 @@ module Ast = struct
   type program = Ast.Program.t
   type query = Ast.Goal.t
   module Loc = Util.Loc
+
+  (* the top-level declarations whose span contains [loc] are removed, and
+     their spans returned (blocks, namespaces, accumulate are kept) *)
+  let remove_declarations_at (p : program) (loc : Loc.t) =
+    let open Ast.Program in
+    let inside (l : Loc.t) =
+      l.Loc.source_name = loc.Loc.source_name
+      && l.Loc.source_start <= loc.Loc.source_start && loc.Loc.source_start <= l.Loc.source_stop in
+    let spans = ref [] in
+    let keep l = if inside l then (spans := l :: !spans; false) else true in
+    let ast = List.filter_map (fun d ->
+      match d with
+      | Clause c -> if keep c.Ast.Clause.loc then Some d else None
+      | Chr r -> if keep r.Ast.Chr.loc then Some d else None
+      | Macro m -> if keep m.Ast.Macro.loc then Some d else None
+      | Pred t -> if keep t.Ast.Type.loc then Some d else None
+      | TypeAbbreviation a -> if keep a.Ast.TypeAbbreviation.loc then Some d else None
+      | Type l -> (match List.filter (fun t -> keep t.Ast.Type.loc) l with [] -> None | l -> Some (Type l))
+      | Kind l -> (match List.filter (fun t -> keep t.Ast.Type.loc) l with [] -> None | l -> Some (Kind l))
+      | d -> Some d) p.Ast.ast in
+    if !spans = [] then None else Some ({ p with Ast.ast }, List.rev !spans)
   module Goal = Ast.Goal
   module Scope = Compiler_data.Scope
   module Term = Compiler_data.ScopedTerm.QTerm
@@ -113,6 +134,33 @@ module Parse = struct
     P.goal_from ~loc buf
 
   exception ParseError = Elpi_parser.Parser_config.ParseError
+
+  type syntax_error = { loc : Ast.Loc.t; message : string; inserted : bool }
+
+  let program_resilient ~elpi:{ Setup.parser } ~loc ~digest lexbuf =
+    let module P = (val parser) in
+    let pos n = { Lexing.pos_fname = loc.Util.Loc.source_name; pos_lnum = loc.Util.Loc.line;
+                  pos_bol = loc.Util.Loc.line_starts_at; pos_cnum = n } in
+    lexbuf.Lexing.lex_abs_pos <- loc.Util.Loc.source_start;
+    lexbuf.Lexing.lex_start_p <- pos loc.Util.Loc.source_start;
+    lexbuf.Lexing.lex_curr_p <- pos loc.Util.Loc.source_start;
+    let errors, completions, decls = P.Internal.program_resilient lexbuf in
+    let loc_of (p : Lexing.position) =
+      { loc with Util.Loc.source_start = p.pos_cnum; source_stop = p.pos_cnum;
+                 line = p.pos_lnum; line_starts_at = p.pos_bol } in
+    let message_of_state s =
+      match Elpi_parser.Error_messages.message s with
+      | m -> String.trim m
+      | exception Not_found -> "syntax error" in
+    let errors = List.rev_map (function
+      | Mastic.ErrorResilientParser.LexError (p, m) -> { loc = loc_of p; message = m; inserted = false }
+      | Mastic.ErrorResilientParser.ParseError (p, st) -> { loc = loc_of p; message = message_of_state st; inserted = false })
+      errors in
+    let inserted = List.rev_map (fun (p, s) ->
+      { loc = loc_of p; message = (if s = "_" then "missing term" else "missing " ^ s); inserted = true }) completions in
+    errors @ inserted,
+    { Elpi_parser.Ast.file_name = loc.Util.Loc.source_name; digest; deps = [];
+      ast = Elpi_parser.Ast.Program.erase_errors decls }
 
   let resolve_file ~elpi:{ Setup.resolver } = resolver
   let std_resolver = Elpi_util.Util.std_resolver

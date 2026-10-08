@@ -234,6 +234,14 @@ module Program : sig
   type t = decl_list parser_output
   [@@ deriving show]
 
+  (** [erase_errors ds] removes the error nodes of the error-resilient parser,
+      so that the program can be scoped and type checked: an erroneous term
+      becomes a fresh variable [_ErrN], an erroneous attribute is dropped, and
+      so is a declaration that cannot stand without its erroneous part (an
+      erroneous declaration, a clause whose head is erroneous, a type with an
+      erroneous type expression) *)
+  val erase_errors : decl list -> decl list
+
 end
 
 module Goal : sig

@@ -532,6 +532,7 @@ end = struct (* {{{ *)
          aux_attrs { r with ifexpr = Some s } rest
       | Untyped :: rest -> aux_attrs { r with typecheck = false } rest
       | AutoSpill :: rest -> aux_attrs { r with autospill = true } rest
+      | AttributeError _ :: rest -> aux_attrs r rest (* erased by the error-resilient parser *)
       | (NoOC (* is set by the predicate *)
         | External _ | Index _ | Functional) as a :: _-> illegal_err a
     in

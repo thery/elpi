@@ -1,10 +1,14 @@
 capabilities: {"definitionProvider":true,"hoverProvider":true,"textDocumentSync":{"change":1,"openClose":true}}
-diagnostics of syntax.elpi: 5
+diagnostics of syntax.elpi: 6
   1:14-1:15 error: Term expected, got keyword.
   2:16-2:17 error: This infix operator expects a right hand side.
   3:4-3:5 error: unexpected character $
   1:14-1:14 info: missing )
   2:16-2:16 info: missing term
+  0:0-0:0 warning: Undeclared globals:
+- File "$DIR/syntax.elpi", line 1, column 0, characters 0-3: p.
+Please add the following text to your program:
+type p int -> (pred).
 diagnostics of typeerr.elpi: 1
   1:11-1:18 error: Typechecker: literal "hello" has type string but = expects an argument of type int
 diagnostics of warn.elpi: 2
@@ -12,8 +16,13 @@ diagnostics of warn.elpi: 2
   1:7-1:8 warning: Y is linear: name it _Y (discard) or Y_ (fresh variable)
 diagnostics of accbad.elpi: 1
   0:0-0:18 error: In $DIR/badlib.elpi, line 1, column 9: Term expected, got keyword.
-diagnostics of accmissing.elpi: 1
+diagnostics of accmissing.elpi: 3
   1:0-1:10 error: File nothere.elpi not found in: 
+  1:0-1:19 warning: accumulate outside file header
+  0:0-0:0 warning: Undeclared globals:
+- File "$DIR/accmissing.elpi", line 1, column 0, characters 0-3: p.
+Please add the following text to your program:
+type p int -> (pred).
 diagnostics of good.elpi: 0
 hover "double 3"+0: 4:8-4:14 "```elpi\n(pred int -> int)\n```"
 hover "double 3 Y"+9: 4:17-4:18 "```elpi\nint\n```"
@@ -29,7 +38,7 @@ definition "std.map"+4: none
 diagnostics of good.elpi: 2
   5:8-5:9 error: This infix operator expects a right hand side.
   5:8-5:8 info: missing term
-hover "double 3"+0: none
+hover "double 3"+0: 4:8-4:14 "```elpi\n(pred int -> int)\n```"
 diagnostics of good.elpi: 0
 hover "double 3"+0: 4:8-4:14 "```elpi\n(pred int -> int)\n```"
 shutdown: null

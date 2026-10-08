@@ -1,7 +1,10 @@
-(* Checking a document with Elpi: error-resilient parsing first, then, if
-   the text has no syntax error, compilation (scoping and type checking) as a
-   unit through the API. The result is a list of diagnostics, as byte offsets
-   in the text, and, when the text compiles, the hover information. *)
+(* Checking a document with Elpi: error-resilient parsing first, then
+   compilation (scoping and type checking) as a unit through the API: of the
+   text when it has no syntax error, otherwise of the program where the
+   erroneous parts are erased (API.Parse.program_resilient), so that type
+   errors, hover and definition are available even when the text has syntax
+   errors. The result is a list of diagnostics, as byte offsets in the text,
+   and, when the program compiles, the hover information. *)
 
 open Elpi.API
 
@@ -49,17 +52,6 @@ let resolver = Parse.std_resolver ~paths:tjpath ()
 
 let elpi = lazy (Setup.init ~builtins:[Elpi.Builtin.std_builtins] ~file_resolver:resolver ())
 
-(* the error-resilient parser *)
-module Resilient = Elpi_parser.Parse.Make (struct
-  let versions = Elpi_util.Util.StrMap.empty
-  let resolver = resolver
-end)
-
-let message_of_state s =
-  match Elpi_parser.Error_messages.message s with
-  | m -> String.trim m
-  | exception Not_found -> "syntax error"
-
 (* --- diagnostics ------------------------------------------------------------ *)
 
 let one_line s = String.concat " " (List.filter (( <> ) "") (String.split_on_char '\n' s))
@@ -87,34 +79,23 @@ let diag_of_loc ~path ~text severity loc message =
             (source_start - line_starts_at + 1) message }
   | None -> { start = 0; stop = 0; severity; message }
 
-let syntax_diagnostics text errors completions =
+let syntax_diagnostics text (errors : Parse.syntax_error list) =
   let t = Text.make text in
-  let error = function
-    | Mastic.ErrorResilientParser.LexError (p, msg) ->
-        let start = p.Lexing.pos_cnum in
-        { start; stop = Text.word_end t start; severity = Error; message = one_line msg }
-    | Mastic.ErrorResilientParser.ParseError (p, state) ->
-        let start = p.Lexing.pos_cnum in
-        { start; stop = Text.word_end t start; severity = Error; message = message_of_state state } in
-  let completion (p, s) =
-    let start = p.Lexing.pos_cnum in
-    { start; stop = start; severity = Information;
-      message = if s = "_" then "missing term" else Printf.sprintf "missing %s" s } in
-  List.rev_map error errors @ List.rev_map completion completions
+  List.map (fun { Parse.loc; message; inserted } ->
+    let start = loc.Ast.Loc.source_start in
+    if inserted then { start; stop = start; severity = Information; message }
+    else { start; stop = Text.word_end t start; severity = Error; message = one_line message })
+    errors
 
 (* --- checking --------------------------------------------------------------- *)
 
 let resilient_parse ~path text =
-  let lexbuf = Lexing.from_string text in
-  lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with pos_fname = path };
-  let errors, completions, _ast = Resilient.Internal.program_resilient lexbuf in
-  syntax_diagnostics text errors completions
-
-let compile ~path text =
   let elpi = Lazy.force elpi in
-  let ast =
-    Parse.program_from ~elpi ~loc:(Ast.Loc.initial path) ~digest:(Digest.string text)
-      (Lexing.from_string text) in
+  let lexbuf = Lexing.from_string text in
+  Parse.program_resilient ~elpi ~loc:(Ast.Loc.initial path) ~digest:(Digest.string text) lexbuf
+
+let compile_program ast =
+  let elpi = Lazy.force elpi in
   let base = Compile.empty_base ~elpi in
   let _, hover =
     List.fold_left (fun (base, hover) sp ->
@@ -123,30 +104,70 @@ let compile ~path text =
       (base, []) (Compile.scope_ast ~elpi ast) in
   hover
 
+(* An error of the compiler, as a location and a message *)
+let error_of_exn = function
+  | Parse.ParseError (loc, msg) -> Some loc, msg
+  | Compile.CompileError (loc, msg) -> loc, msg
+  | Elpi_error (loc, msg) -> loc, msg
+  | Failure msg -> None, msg
+  | e ->
+      log "internal error: %s\n%s" (Printexc.to_string e) (Printexc.get_backtrace ());
+      None, "internal error: " ^ Printexc.to_string e
+
+(* The compiler stops at the first error. To go on, the declaration where the
+   error is is removed and the program compiled again (at most [max_errors]
+   times), so that all the errors are reported, and the hover information is
+   available for the rest. An error in a declaration that contains a syntax
+   error (a position of [syntax]) is a consequence of the error recovery: it
+   is not reported. Warnings are those of the last compilation. *)
+let max_errors = 50
+
+let compile_resilient ~path ~text ~syntax ast =
+  let caused_by_syntax spans =
+    List.exists (fun (sp : Ast.Loc.t) ->
+        List.exists (fun p -> sp.source_start <= p && p <= sp.source_stop) syntax) spans in
+  let rec go ast diags n =
+    warnings := [];
+    match compile_program ast with
+    | hover -> List.rev diags, Some hover
+    | exception e ->
+        let loc, msg = error_of_exn e in
+        let diag = diag_of_loc ~path ~text Error loc msg in
+        match loc with
+        | Some l when n > 0 && l.Ast.Loc.source_name = path -> begin
+            match Ast.remove_declarations_at ast l with
+            | Some (ast, spans) -> go ast (if caused_by_syntax spans then diags else diag :: diags) (n - 1)
+            | None -> List.rev (diag :: diags), None
+          end
+        | _ -> List.rev (diag :: diags), None in
+  go ast [] max_errors
+
 let check ~path text =
-  let error loc msg = { diagnostics = [ diag_of_loc ~path ~text Error loc msg ]; hover = None } in
-  let syntax =
-    (* the resilient parser may still raise: the normal path then reports
-       the first error *)
-    try resilient_parse ~path text
-    with e -> log "resilient parser: %s" (Printexc.to_string e); [] in
-  if syntax <> [] then { diagnostics = syntax; hover = None }
-  else begin
-    warnings := [];
-    let result =
-      match compile ~path text with
-      | hover -> { diagnostics = []; hover = Some hover }
-      | exception Parse.ParseError (loc, msg) -> error (Some loc) msg
-      | exception Compile.CompileError (loc, msg) -> error loc msg
-      | exception Elpi_error (loc, msg) -> error loc msg
-      | exception (Failure msg) -> error None msg
-      | exception e ->
-          log "internal error: %s\n%s" (Printexc.to_string e) (Printexc.get_backtrace ());
-          error None ("internal error: " ^ Printexc.to_string e) in
-    let ws = List.rev_map (fun (loc, msg) -> diag_of_loc ~path ~text Warning loc msg) !warnings in
-    warnings := [];
-    { result with diagnostics = result.diagnostics @ ws }
-  end
+  (* the resilient parser may still raise: the normal path then reports the
+     first error *)
+  let syntax, erased =
+    match resilient_parse ~path text with
+    | errors, ast -> syntax_diagnostics text errors, Some ast
+    | exception e -> log "resilient parser: %s" (Printexc.to_string e); [], None in
+  (* without syntax error, the text is parsed as Elpi does; with syntax
+     errors, the program where they are erased is used *)
+  let program =
+    match syntax, erased with
+    | _ :: _, Some ast -> Ok ast
+    | _ ->
+        let elpi = Lazy.force elpi in
+        match Parse.program_from ~elpi ~loc:(Ast.Loc.initial path) ~digest:(Digest.string text)
+                (Lexing.from_string text) with
+        | ast -> Ok ast
+        | exception e -> Error (error_of_exn e) in
+  let errors, hover =
+    match program with
+    | Ok ast ->
+        compile_resilient ~path ~text ~syntax:(List.map (fun d -> d.start) syntax) ast
+    | Error (loc, msg) -> [ diag_of_loc ~path ~text Error loc msg ], None in
+  let ws = List.rev_map (fun (loc, msg) -> diag_of_loc ~path ~text Warning loc msg) !warnings in
+  warnings := [];
+  { diagnostics = syntax @ errors @ ws; hover }
 
 (* --- queries on the hover information ---------------------------------------- *)
 

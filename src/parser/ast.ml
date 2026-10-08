@@ -396,6 +396,65 @@ module Program = struct
 
 type t = decl_list parser_output [@@deriving show]
 
+(* Erasing the error nodes of the error-resilient parser, so that the program
+   can be scoped and type checked: an erroneous term becomes a fresh variable
+   _ErrN (any type fits, no linearity warning, it can be applied), an
+   erroneous attribute is dropped, and a declaration that cannot stand
+   without its erroneous part is dropped (an erroneous declaration, a clause
+   whose head is erroneous, a type or a type abbreviation with an erroneous
+   type expression). *)
+let erase_errors (ds : decl list) : decl list =
+  let n = ref 0 in
+  let fresh () = incr n; Func.from_string (Printf.sprintf "_Err%d" !n) in
+  let rec type_has_errors : 'a. 'a TypeExpression.t -> bool = fun ty ->
+    match ty.TypeExpression.tit with
+    | TypeExpression.TErr _ -> true
+    | TypeExpression.TConst _ -> false
+    | TypeExpression.TApp (_, t, ts) -> List.exists type_has_errors (t :: ts)
+    | TypeExpression.TPred (_, l, _) -> List.exists (fun (_, t) -> type_has_errors t) l
+    | TypeExpression.TArr (a, b) -> type_has_errors a || type_has_errors b in
+  let rec term (t : Term.t) : Term.t =
+    match t.it with
+    | Term.Err _ -> { t with it = Term.Const (fresh ()) }
+    | Term.App (h, l) -> { t with it = Term.App (term h, List.map term l) }
+    | Term.Lam (x, xl, ty, b) ->
+        let ty = match ty with Some ty when type_has_errors ty -> None | ty -> ty in
+        { t with it = Term.Lam (x, xl, ty, term b) }
+    | Term.Cast (t', ty) -> if type_has_errors ty then term t' else { t with it = Term.Cast (term t', ty) }
+    | Term.Parens t' -> { t with it = Term.Parens (term t') }
+    | Term.Const _ | Term.CData _ | Term.Quoted _ -> t in
+  (* the head of a clause, below :- *)
+  let rec head_is_error (t : Term.t) =
+    match t.it with
+    | Term.Err _ -> true
+    | Term.App ({ it = Term.Const c }, [ hd; _ ]) when Func.equal c Func.rimplf -> head_is_error hd
+    | Term.App (h, _) -> head_is_error h
+    | Term.Parens t -> head_is_error t
+    | _ -> false in
+  let attributes l = List.filter (function AttributeError _ -> false | _ -> true) l in
+  let sequent { Chr.eigen; context; conclusion } =
+    { Chr.eigen = term eigen; context = term context; conclusion = term conclusion } in
+  let rec abbrev_has_errors = function
+    | TypeAbbreviation.Lam (_, _, v) -> abbrev_has_errors v
+    | TypeAbbreviation.Ty ty -> type_has_errors ty in
+  List.filter_map (function
+    | Error _ -> None
+    | Clause c when head_is_error c.Clause.body -> None
+    | Clause c -> Some (Clause { c with Clause.body = term c.Clause.body; attributes = attributes c.Clause.attributes })
+    | Chr r ->
+        Some (Chr { r with Chr.to_match = List.map sequent r.Chr.to_match;
+                           to_remove = List.map sequent r.Chr.to_remove;
+                           guard = Option.map term r.Chr.guard;
+                           new_goal = Option.map sequent r.Chr.new_goal;
+                           attributes = attributes r.Chr.attributes })
+    | Macro m -> Some (Macro { m with Macro.body = term m.Macro.body })
+    | Pred t when type_has_errors t.Type.ty -> None
+    | Pred t -> Some (Pred { t with Type.attributes = attributes t.Type.attributes })
+    | Type l -> (match List.filter (fun t -> not (type_has_errors t.Type.ty)) l with [] -> None | l -> Some (Type l))
+    | Kind l -> (match List.filter (fun t -> not (type_has_errors t.Type.ty)) l with [] -> None | l -> Some (Kind l))
+    | TypeAbbreviation a when abbrev_has_errors a.TypeAbbreviation.value -> None
+    | d -> Some d) ds
+
 end
 
 module Goal = struct

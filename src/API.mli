@@ -32,6 +32,13 @@ module Ast : sig
     val initial : ?client_payload:Obj.t -> string -> t
   end
 
+  (** [remove_declarations_at p loc] removes from [p] the top-level
+      declarations (clauses, rules, predicates, types, kinds, macros, type
+      abbreviations) whose span contains the start of [loc], and returns their
+      spans; [None] when there is none. Used to go on checking a program after
+      an error. *)
+  val remove_declarations_at : program -> Loc.t -> (program * Loc.t list) option
+
   module Name : sig
     type t
     val pp : Format.formatter -> t -> unit
@@ -236,6 +243,18 @@ module Parse : sig
       (?cwd:string -> unit:string -> unit -> string)
 
   exception ParseError of Ast.Loc.t * string
+
+  (** Error-resilient parsing (with Mastic): it never fails. It returns the
+      syntax errors, including the tokens inserted by the recovery
+      ([inserted], message "missing ..."), and the program where the
+      erroneous parts are erased (an erroneous term becomes a fresh variable,
+      a declaration that cannot stand without its erroneous part is dropped),
+      which can be scoped and compiled as usual: type errors can then be
+      reported even when the text has syntax errors. The lexbuf must hold the
+      whole text (e.g. [Lexing.from_string]). *)
+  type syntax_error = { loc : Ast.Loc.t; message : string; inserted : bool }
+  val program_resilient : elpi:Setup.elpi ->
+    loc:Ast.Loc.t -> digest:Digest.t -> Lexing.lexbuf -> syntax_error list * Ast.program
 end
 
 

@@ -9,17 +9,27 @@ errors of a file at once.
 
 For each open `.elpi` document (full text synchronization), the server checks the text:
 
-1. it parses it with the **error-resilient parser**. If there are syntax
-   errors, they are all published as diagnostics (severity *Error*), with the
-   tokens inserted by the recovery as *Information* diagnostics ("missing )",
-   "missing term"), and the check stops there;
-2. otherwise it **compiles the text as a unit** through the API of Elpi
-   (`Parse.program_from`, `Compile.scope_ast`, `Compile.unit`), and publishes
-   the scoping/type errors (the first one: Elpi stops at the first error) and
-   the warnings (e.g. linear variables) as diagnostics. `accumulate`d files are
-   resolved relative to the directory of the document, then in `TJPATH`. An
-   error located in an accumulated file is shown on the `accumulate` directive;
-3. if the text compiles, it keeps the result of `Compile.hover` for:
+1. it parses it with the **error-resilient parser**
+   (`Parse.program_resilient` of the API). All the syntax errors are published
+   as diagnostics (severity *Error*), with the tokens inserted by the recovery
+   as *Information* diagnostics ("missing )", "missing term");
+2. it **compiles the program as a unit** through the API of Elpi
+   (`Compile.scope_ast`, `Compile.unit`): the text itself when it has no
+   syntax error, otherwise the program returned by the resilient parser, where
+   the **erroneous parts are erased** (an erroneous term becomes a fresh
+   variable, which fits any type; a declaration that cannot stand without its
+   erroneous part is dropped). So the **type checker works on a text with
+   syntax errors** too;
+3. the compiler stops at the first error: the declaration where it is is then
+   **removed and the program compiled again** (`Ast.remove_declarations_at`
+   of the API, at most 50 times), so that **all the type errors** are reported.
+   An error in a declaration that contains a syntax error is a consequence of
+   the recovery, and is not reported. The warnings (e.g. linear variables) are
+   published too. `accumulate`d files are resolved relative to the directory
+   of the document, then in `TJPATH`. An error located in an accumulated file
+   is shown on the `accumulate` directive;
+4. the result of `Compile.hover` of the program that finally compiles (all of
+   it, but the removed declarations) is kept for:
    - **hover**: the type of the innermost sub-expression under the cursor;
    - **go to definition**: the declaration of the symbol under the cursor
      (possibly in an accumulated file). There is no answer for the predicates of
@@ -87,9 +97,10 @@ not on opam yet: it is built together with Elpi, in one dune workspace.
    `_build/install/default/bin/elpi-lsp` (not needed if `elpi-lsp` is in the
    `PATH`).
 
-6. Open a `.elpi` file: syntax errors are underlined (all of them at once),
-   then type errors; on a file that compiles, hovering shows types and F12
-   (Go to Definition) jumps to the declaration of a predicate.
+6. Open a `.elpi` file: syntax errors and type errors are underlined, all of
+   them at once, even when the text has syntax errors; hovering shows types
+   and F12 (Go to Definition) jumps to the declaration of a predicate, in the
+   parts of the text without error.
 
 The extension can be installed together with the syntax highlighting extension
 of Elpi (`gares.elpi-lang`): both use the language id `elpi`. More about the
@@ -109,10 +120,14 @@ Any LSP client can be used: the server takes no argument (it ignores
 
 ## Limits
 
-- Only the first scoping or type error is reported (the compiler stops there),
-  and only when the text has no syntax error.
-- Hover and definition work only on a text that compiles: while the text has
-  errors, there is no answer.
+- After an error, the whole declaration where it is is removed before compiling
+  again: a second error in the same clause is not reported, and there is no
+  hover in that clause.
+- A type error that the erasure of a syntax error causes is hidden only if it is
+  in the declaration of the syntax error; in rare cases an erased term (a
+  fresh variable) may still cause a confusing error elsewhere.
+- Warnings without a location (e.g. "Undeclared globals") are shown at the
+  beginning of the document.
 - The definition of a symbol is its whole declaration (e.g. the `pred`
   declaration), not just the name. There is no definition for variables nor for
   the standard library.

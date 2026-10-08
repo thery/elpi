@@ -1,0 +1,16 @@
+kind nat type.
+type z nat.
+type s nat -> nat.
+
+pred add i:nat, i:nat, o:nat.
+add z N N.
+add (s N) M (s K) :- add N M K.
+
+pred double i:nat, o:nat.
+double N M :- add N N M + .
+
+pred broken o:nat.
+broken X :- add z "two" X.
+
+pred quad i:nat, o:nat.
+quad N M :- double N K, double K M.
