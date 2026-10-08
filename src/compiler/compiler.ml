@@ -2725,8 +2725,8 @@ let info_of_scoped_term ~types t =
     | CData _ -> log_ty loc ty
     | Spill(t,_) -> log_ty loc ty; aux_loc t
     | Cast(t,_) -> log_ty loc ty; aux_loc t
-    | Lam(Some { loc = sloc; ty = sty},_,_t) -> log_ty sloc (TypeAssignment.deref_opt sty); log_ty loc ty; aux_loc t
-    | Lam(None,_,_t) -> log_ty loc ty; aux_loc t
+    | Lam(Some { loc = sloc; ty = sty},_,t) -> log_ty sloc (TypeAssignment.deref_opt sty); log_ty loc ty; aux_loc t
+    | Lam(None,_,t) -> log_ty loc ty; aux_loc t
   and aux_loc x = aux x.loc (TypeAssignment.deref_opt x.ty) x.it
   in
   aux_loc t;
