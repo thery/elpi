@@ -52,6 +52,15 @@ extension maps these kinds to the scopes of the TextMate grammar of
 but the tokens are recognized by the parser instead of regular expressions.
 See `lsp/highlight.ml`.
 
+To see the difference, open `editors/vscode-lsp/test/colors.elpi`: with
+regular expressions only, every lowercase name has the color of a function;
+with the server, the constants `z` and `s` have no color, and the variable `x`
+bound by `\` has the color of a binder. Semantic tokens are used only if
+`"editor.semanticHighlighting.enabled": true` is set in the settings of VS
+Code (its default, `configuredByTheme`, leaves it to the color theme, and many
+themes leave it off); switching it between `true` and `false` shows the two
+colorings.
+
 Changes are debounced: messages from the client are handled before checks,
 so after a burst of changes only the last version of a document is checked.
 A hover or definition request on a document not checked yet checks it first.

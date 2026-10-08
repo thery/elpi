@@ -1,0 +1,13 @@
+kind nat type.
+type z nat.
+type s nat -> nat.
+
+pred add i:nat, i:nat, o:nat.
+add z N N.
+add (s N) M (s K) :- add N M K.
+
+pred twice i:(nat -> nat), i:nat, o:nat.
+twice F X Y :- Y = F (F X).
+
+pred example o:nat.
+example Y :- twice (x\ s x) z Y.
