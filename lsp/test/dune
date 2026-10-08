@@ -1,0 +1,14 @@
+(executable
+ (name test_lsp)
+ (modules test_lsp)
+ (libraries yojson unix))
+
+(rule
+ (deps syntax.elpi typeerr.elpi good.elpi lib.elpi)
+ (action
+  (with-stdout-to test_lsp.output
+   (run %{exe:test_lsp.exe} %{exe:../elpi_lsp.exe} .))))
+
+(rule
+ (alias runtest)
+ (action (diff test_lsp.expected test_lsp.output)))

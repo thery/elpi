@@ -1,0 +1,29 @@
+capabilities: {"definitionProvider":true,"hoverProvider":true,"textDocumentSync":{"change":1,"openClose":true}}
+diagnostics of syntax.elpi: 5
+  1:14-1:15 error: Term expected, got keyword.
+  2:16-2:17 error: This infix operator expects a right hand side.
+  3:4-3:5 error: unexpected character $
+  1:14-1:14 info: missing )
+  2:16-2:16 info: missing term
+diagnostics of typeerr.elpi: 1
+  1:11-1:18 error: Typechecker: literal "hello" has type string but = expects an argument of type int
+diagnostics of good.elpi: 0
+hover "double 3"+0: 4:8-4:14 "```elpi\n(pred int -> int)\n```"
+hover "double 3 Y"+9: 4:17-4:18 "```elpi\nint\n```"
+hover "twice Y Z"+0: 4:20-4:25 "```elpi\n(pred int -> int)\n```"
+hover "x\\ y\\ y = x"+6: 4:50-4:51 "```elpi\nint\n```"
+hover "std.map"+4: 4:31-4:38 "```elpi\n(func list int, ((func int -> int)) -> list int)\n```"
+hover "\"\206\187\" L"+5: 4:70-4:71 "```elpi\nlist int\n```"
+hover "% a comment"+3: none
+definition "double 3"+2: file://$DIR/good.elpi 1:0-1:24
+definition "twice Y Z"+1: file:///home/thery/claudeExp/mastic-work/elpi/lsp/test/./lib.elpi 0:0-0:23
+definition "double 3 Y"+9: none
+definition "std.map"+4: none
+diagnostics of good.elpi: 2
+  5:8-5:9 error: This infix operator expects a right hand side.
+  5:8-5:8 info: missing term
+hover "double 3"+0: none
+diagnostics of good.elpi: 0
+hover "double 3"+0: 4:8-4:14 "```elpi\n(pred int -> int)\n```"
+shutdown: null
+server exited with code 0
